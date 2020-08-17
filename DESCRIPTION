@@ -1,0 +1,15 @@
+Package: evoclim
+Title: Climatic Niche Evolution of Lichens
+Version: 0.0.0.9000-17-08-2020
+Authors@R: 
+    person(given = "Robert",
+           family = "Smith",
+           role = c("aut", "cre"),
+           email = "robert.smith3@usda.gov",
+           comment = c(ORCID = "0000-0001-5085-634X"))
+Description: Working repository for phylogenetic reconstruction of ancestral climate tolerances of lichenized fungi.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
