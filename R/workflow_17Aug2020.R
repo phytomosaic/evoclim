@@ -8,45 +8,78 @@
 
 
 ### preamble
+rm(list=ls())
 # devtools::install_github('phytomosaic/ecole')
-require(ecole)
-require(phytools)
-require(sp)
-require(raster)
-require(FNN)   # to assign env values from nearest neighbors, when NA
+require(ecole)      # for plotting and convenience functions
+require(phytools)   # for phylogenetic comparative tasks
+require(sp)         # for spatial tasks
+require(raster)     # for spatial tasks
+require(FNN)        # to assign env values from nearest neighbors, when NA
+require(data.table) # for memory-safe handling of large files
+require(CoordinateCleaner) # for obvious
+### read GBIF individual species files, binding them together
+#     (rows = occurrences, cols = species+lon+lat)
+`f` <- function(x, keepcols=NULL, ...) {
+  cat(round(file.info(x)$size/1024^2,1),'MB; ')
+  # cat('Time elapsed:',
+  #     system.time({
+        out <- data.table::fread(x, header = T, dec = '.', fill = T, 
+                                 data.table = T, select = keepcols,
+                                 integer64='character', ...)
+      # })[[3]], '\n')
+  return(out)
+}
+pth <- './data_raw/gbif/data_raw_gbif/'
+j   <- c('key','species','decimalLatitude','decimalLongitude','issues','year')
+fnm <- list.files(pth, pattern='.csv', full.names=T)
+xy  <- rbindlist(lapply(fnm, f, keepcols=j), fill = T)
+setnames(xy, names(xy), tolower(names(xy))) # cleanup column names
+setnames(xy, c('decimallatitude','decimallongitude'), c('lat','lon')) # simplify
+dim(xy)
 
-### read in the phylogeny (Nelsen et al 2020 PNAS)
-p <- read.tree('./data/Lecanoromycetes_ML_Tree_Timescaled')
-plot(p, cex=0.2)
-plot(p, cex=0.2, type="fan")
 
-### get names to query GBIF
-pspe <- p$tip.label               # species
-pgen <- sub('\\_.*', '', pspe)    # genera
 
-### query GBIF for all available species...
-# TODO
-
-### convert GBIF output to long list (rows = occurrence, cols = species+lon+lat)
-# TODO
-xy <- data.frame(spe=rep('Hyperphyscia_adglutinata',3), 
-                 lon=c(-94.001, -94.002, -95.628), 
-                 lat=c(40.090, 41.549, 39.952))
+anyDuplicated(xy)
 
 ### filter occurrences (duplicates, ocean-dwellers, etc)
 # TODO
-xy <- xy[!duplicated(xy),]
+sum(duplicated(xy))        # 7638 duplicates
+xy <- xy[!duplicated(xy),] # remove duplicates
+xy$issues %in% c('')
+
+
+
 
 ### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
 # TODO
 
-### obtain WorldClim climate data
-r <- raster::getData("worldclim",var="bio",res=10)
-r <- r[[c(1,12)]]
-names(r) <- c("MAT","MAP")
+# ### obtain WorldClim climate data
+# r <- raster::getData('worldclim',var='bio',res=10)
+
+
+# ### obtain MERRAclim climate data
+# yr <- c('80s','90s','00s')
+# bc <- 1:19
+# pth <- './data_raw/merraclim/'
+# for(x in 1:length(bc)) {
+#   s80s <- raster(paste0(pth,'2_5m_mean_',yr[1],'_bio',bc[x],'.tif'))
+#   s90s <- raster(paste0(pth,'2_5m_mean_',yr[2],'_bio',bc[x],'.tif'))
+#   s00s <- raster(paste0(pth,'2_5m_mean_',yr[3],'_bio',bc[x],'.tif'))
+#   stk <- stack(s80s,s90s,s00s)
+#   stkmean <- mean(stk)
+#   writeRaster(stkmean, paste0(pth,'2_5_mean_mean80sto00s_bio',bc[x],'.tiff'),
+#               type='GTiff', overwrite=T)
+# }
+
+### read in 1980-2010 30-y climate normals (from MERRAclim)
+pth <- './data_raw/merraclim/'
+fnm <- list.files(pth, pattern ='\\.tif$', full.names=T)
+r   <- stack(paste0(pth, fnm))
+trg_prj   <- projection(r)                     # raster projection
+
+
 
 ### convert coordinates to spatial object
-trg_prj   <- projection(r)                     # raster projection
 `make_xy` <- function(xy, crs, ...) {          # reproject points
   xy <- xy[!(is.na(xy$lon) | is.na(xy$lat)),]  # rm NAs
   coordinates(xy) <- ~lon+lat
@@ -123,13 +156,21 @@ rm(i,j,x) # cleanup
 
 ### for each species, get niche positions and breadth (as 'traits')
 tr <- sapply(sort(unique(d$spe)),
-            function(i) {
-              x <- d[d$spe==i,'MAP'] # TODO: more climate variables
-              x <- na.omit(x)
-              out <- c(quantile(x, probs=c(0.05,0.50,0.95)), stats::IQR(x))
-              names(out) <- c('q05','q50','q95','iqr')
-            })
+             function(i) {
+               x <- d[d$spe==i,'MAP'] # TODO: more climate variables
+               x <- na.omit(x)
+               out <- c(quantile(x, probs=c(0.05,0.50,0.95)), stats::IQR(x))
+               names(out) <- c('q05','q50','q95','iqr')
+             })
 cc <- colvec(tr)
+
+
+### read in the phylogeny (Nelsen et al 2020 PNAS)
+p <- read.tree('./data_raw/Lecanoromycetes_ML_Tree_Timescaled')
+# plot(p, cex=0.2)
+# plot(p, cex=0.2, type='fan')
+# pspe <- p$tip.label               # species names
+# pgen <- sub('\\_.*', '', pspe)    # genera names
 
 ### prune to keep only GBIF-valid species
 has_gbif <- unique(d$spe)
@@ -193,7 +234,7 @@ tiplabels(pch=19, col = colvec(tr), cex = 1)
 
 ### plot ancestral trait reconstruction
 png('./fig/phy_traitreconstruction.tif', 
-     wid=3.5, hei=7.5, unit='in', bg='transparent', res=700)
+    wid=3.5, hei=7.5, unit='in', bg='transparent', res=700)
 plot(trm, fsize=0.4, lwd=3, outline=F,
      leg.txt='Upper thermal tolerance (\u00b0C)')
 nodelabels(pch=19, col = colvec(fa), cex = 0.9)
@@ -215,5 +256,26 @@ ccc <- c(cc[p$tip.label], rep('black', p$Nnode))
 names(ccc) <- 1:(length(p$tip) + p$Nnode)
 phylomorphospace(p, X, label='horizontal', fsize=0.7,
                  control=list(col.node=ccc))
+
+
+# ### variable names, just for reference:
+#   bio1  = Mean annual temperature
+#   bio2  = Mean diurnal range (mean of max temp - min temp)
+#   bio3  = Isothermality (bio2/bio7) (* 100)
+#   bio4  = Temperature seasonality (standard deviation *100)
+#   bio5  = Max temperature of warmest month
+#   bio6  = Min temperature of coldest month
+#   bio7  = Temperature annual range (bio5-bio6)
+#   bio8  = Mean temperature of the wettest quarter
+#   bio9  = Mean temperature of driest quarter
+#   bio10 = Mean temperature of warmest quarter
+#   bio11 = Mean temperature of coldest quarter
+#   bio12 = Total (annual) precipitation
+#   bio13 = Precipitation of wettest month
+#   bio14 = Precipitation of driest month
+#   bio15 = Precipitation seasonality (coefficient of variation)
+#   bio16 = Precipitation of wettest quarter
+#   bio17 = Precipitation of driest quarter
+#   bio18 = Precipitation of warmest quarter
 
 ####    END    ####
