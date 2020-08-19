@@ -11,6 +11,7 @@
 rm(list=ls())
 # devtools::install_github('phytomosaic/ecole')
 require(ecole)      # for plotting and convenience functions
+require(viridis)    # for plotting color scales
 require(phytools)   # for phylogenetic comparative tasks
 require(sp)         # for spatial tasks
 require(raster)     # for spatial tasks
@@ -20,42 +21,42 @@ require(CoordinateCleaner) # for obvious
 ### read GBIF individual species files, binding them together
 #     (rows = occurrences, cols = species+lon+lat)
 `f` <- function(x, keepcols=NULL, ...) {
-  cat(round(file.info(x)$size/1024^2,1),'MB; ')
-  # cat('Time elapsed:',
-  #     system.time({
-        out <- data.table::fread(x, header = T, dec = '.', fill = T, 
-                                 data.table = T, select = keepcols,
-                                 integer64='character', ...)
-      # })[[3]], '\n')
+  cat(round(file.info(x)$size/1024^2,1),', ') # file size, in MB
+  out <- data.table::fread(x, header = T, dec = '.', fill = T, data.table = T, 
+                           select = keepcols, integer64='character', ...)
   return(out)
 }
 pth <- './data_raw/gbif/data_raw_gbif/'
 j   <- c('key','species','decimalLatitude','decimalLongitude','issues','year')
 fnm <- list.files(pth, pattern='.csv', full.names=T)
-xy  <- rbindlist(lapply(fnm, f, keepcols=j), fill = T)
+xy  <- rbindlist(lapply(fnm, f, keepcols=j), fill=T) # ! ! TIMEWARN ! ! 3-4 min
 setnames(xy, names(xy), tolower(names(xy))) # cleanup column names
 setnames(xy, c('decimallatitude','decimallongitude'), c('lat','lon')) # simplify
-dim(xy)
+dim(xy) # 878681 observations
 
+### filter occurrences (duplicates, artificial coords, etc)
+sum(duplicated(xy))         # 7638 duplicates flagged for removal
+xy  <- xy[!duplicated(xy),] # remove duplicates
+### clean coordinates ('seas' test removes ~10% of all occurrences! dont use)
+flg <- CoordinateCleaner::clean_coordinates(
+  x = xy, lon='lon', lat='lat',
+  tests = c('capitals','centroids','equal','gbif','institutions','zeros'),
+  capitals_rad=250, centroids_rad=250, centroids_detail='country', inst_rad=100)
+sum(flg$.summary == 0)   # 3663 were flagged for removal
+dim(flg)[[1]] - sapply(flg[,grep('\\.', names(flg))], function(i) sum(i)) 
+xy <- xy[flg$.summary,]  # exclude 3663 records flagged by ANY test
+dim(xy)                  # 867380 observations
+rm(f,flg,fnm,j,pth)      # cleanup environment
+gc()
 
-
-anyDuplicated(xy)
-
-### filter occurrences (duplicates, ocean-dwellers, etc)
-# TODO
-sum(duplicated(xy))        # 7638 duplicates
-xy <- xy[!duplicated(xy),] # remove duplicates
-xy$issues %in% c('')
-
-
-
-
-### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
-# TODO
-
-# ### obtain WorldClim climate data
-# r <- raster::getData('worldclim',var='bio',res=10)
-
+### remove species having too few occurrences (less than 10)
+frq <- table(xy$species) # species frequencies
+set_par(2) ; hist(frq, breaks=55) ; hist(log10(1+frq), breaks=55)
+length(unique(xy$species))         # 2854 taxa total
+sum(frq < 10)                      # 490 taxa are too infrequent to analyze
+length(j <- names(frq[frq >= 10])) # 2364 taxa to keep
+xy <- xy[xy$species %in% j]
+dim(xy)                  # 865255 observations
 
 # ### obtain MERRAclim climate data
 # yr <- c('80s','90s','00s')
@@ -72,76 +73,87 @@ xy$issues %in% c('')
 # }
 
 ### read in 1980-2010 30-y climate normals (from MERRAclim)
-pth <- './data_raw/merraclim/'
-fnm <- list.files(pth, pattern ='\\.tif$', full.names=T)
-r   <- stack(paste0(pth, fnm))
-trg_prj   <- projection(r)                     # raster projection
-
-
+pth     <- './data_raw/merraclim/'
+fnm     <- list.files(pth, pattern ='\\.tif$', full.names=T)
+r       <- stack(fnm)
+trg_prj <- projection(r)                     # raster projection
+# png('./fig/fig_00_climatevars.png', wid=8.5, hei=8.5, units='in',
+#     bg='transparent', res=500)
+# set_par(1)
+# plot(r, col=viridis::inferno(99, begin=0.1, end=0.95), axes=F)
+# # require(maptools)
+# # data(wrld_simpl)
+# # plot(wrld_simpl, add=TRUE)
+# dev.off()
 
 ### convert coordinates to spatial object
 `make_xy` <- function(xy, crs, ...) {          # reproject points
-  xy <- xy[!(is.na(xy$lon) | is.na(xy$lat)),]  # rm NAs
   coordinates(xy) <- ~lon+lat
-  proj4string(xy) <- CRS('+init=epsg:4269')    # NAD83 dec deg (as for FIA)
-  return(spTransform(xy, crs))
+  proj4string(xy) <- sp::CRS('+init=epsg:4326')    # WGS84 dec deg
+  return(sp::spTransform(xy, crs))
 }
-xy <- make_xy(xy, crs=trg_prj) # reproject Albers equal-area proj
+xy <- make_xy(xy, crs=trg_prj)
+rm(make_xy,pth,fnm,trg_prj)
+# save(xy, file='./data/xy.rda')  # save intermediate result to save time
+load(file='./data/xy.rda',verbose=T)
 
 ### extract env values at query coordinates
-# vals <- extract(r,xy) ### SLOW WAY! 
-### FAST WAY! extract values at query coordinates, in CHUNKS
-`extract_raster` <- function(r, xy, breaks=10, ...){
-  if(class(r)!='RasterLayer') {
-    stop('r must be `RasterLayer` object')
-  }
-  if(!inherits(xy,'SpatialPoints')) {
-    stop('xy must be `SpatialPoints` object')
-  }
-  # divide extent into equal area chunks for speed
-  `make_chunk` <- function(e, breaks, ...){
-    m  <- matrix(NA, nrow=breaks, ncol=4,
-                 dimnames=list(NULL,
-                               c('xmin','xmax','ymin','ymax')))
-    rng <- range(c(e[1],e[2]))  # x dimension
-    b   <- seq(rng[1], rng[2], length=breaks+1)
-    for(i in 1:(breaks)){
-      m[i,1:2] <- c(b[i], b[i+1])
-    }
-    rng <- range(c(e[3],e[4]))  # y dimension
-    b   <- seq(rng[1], rng[2], length=breaks+1)
-    for(i in 1:(breaks)){
-      m[i,3:4] <- c(b[i], b[i+1])
-    }
-    m <- as.matrix(merge(m[,1:2],m[,3:4]))
-    m
-  }
-  ck     <- make_chunk(e=extent(r), breaks=breaks)
-  nchunk <- dim(ck)[[1]]
-  npts   <- dim(xy@coords)[[1]]
-  p      <- matrix(NA, nrow=npts, ncol=nchunk)
-  pb     <- pbCreate(nchunk, progress='text', style=3, ...)
-  for(i in 1:nchunk) {
-    pbStep(pb, i)
-    p[,i] <- raster::extract(crop(r, extent(ck[i,])), xy,
-                             progress='text')
-  }
-  # collect chunks into one vector 'tmp'
-  nonNA <- !is.na(p)
-  tmp   <- vector('numeric', npts)
-  for(i in 1:npts){
-    if( all(!nonNA[i,]) ){
-      tmp[i] <- NA   # some points were not queryable
-    } else {
-      tmp[i] <- p[i, min(which(nonNA[i,]))]
-    }
-  }
-  # assemble matrix
-  p <- matrix(c(1:npts,tmp),nrow=npts,ncol=2,dimnames=list(NULL,c('pt','val')))
-  pbClose(pb)
-  return(p)
-}
-vals <- extract_raster(r, xy, breaks=10)      # env values
+vals <- raster::extract(r,xy) # <<--- SLOW WAY!
+# ### FAST WAY! extract values at query coordinates, in CHUNKS
+# `extract_raster` <- function(r, xy, breaks=20, ...) {
+#   time_start <- Sys.time()
+#   if(!class(r) %in% c('RasterLayer','RasterStack')) {
+#     stop('r must be `RasterLayer` object')
+#   }
+#   if(!inherits(xy,'SpatialPoints')) {
+#     stop('xy must be `SpatialPoints` object')
+#   }
+#   # divide extent into equal area chunks for speed
+#   `make_chunk` <- function(e, breaks, ...){
+#     m  <- matrix(NA, nrow=breaks, ncol=4,
+#                  dimnames=list(NULL,
+#                                c('xmin','xmax','ymin','ymax')))
+#     rng <- range(c(e[1],e[2]))  # x dimension
+#     b   <- seq(rng[1], rng[2], length=breaks+1)
+#     for(i in 1:(breaks)){
+#       m[i,1:2] <- c(b[i], b[i+1])
+#     }
+#     rng <- range(c(e[3],e[4]))  # y dimension
+#     b   <- seq(rng[1], rng[2], length=breaks+1)
+#     for(i in 1:(breaks)){
+#       m[i,3:4] <- c(b[i], b[i+1])
+#     }
+#     m <- as.matrix(merge(m[,1:2],m[,3:4]))
+#     m
+#   }
+#   ck     <- make_chunk(e=extent(r), breaks=breaks)
+#   nchunk <- dim(ck)[[1]]
+#   npts   <- dim(xy@coords)[[1]]
+#   p      <- matrix(NA, nrow=npts, ncol=nchunk)
+#   pb     <- pbCreate(nchunk, progress='text', style=3, ...)
+#   for(i in 1:nchunk) {
+#     pbStep(pb, i)
+#     p[,i] <- raster::extract(crop(r, extent(ck[i,])), xy,
+#                              progress='text')
+#   }
+#   # collect chunks into one vector 'tmp'
+#   nonNA <- !is.na(p)
+#   tmp   <- vector('numeric', npts)
+#   for(i in 1:npts){
+#     if( all(!nonNA[i,]) ){
+#       tmp[i] <- NA   # some points were not queryable
+#     } else {
+#       tmp[i] <- p[i, min(which(nonNA[i,]))]
+#     }
+#   }
+#   # assemble matrix
+#   p <- matrix(c(1:npts,tmp),nrow=npts,ncol=2,dimnames=list(NULL,c('pt','val')))
+#   pbClose(pb)
+#   time_end <- Sys.time()
+#   cat('Time elapsed:', time_end - time_start)
+#   return(p)
+# }
+# vals <- extract_raster(r, xy, breaks=20)      # env values
 
 ### collect values and coordinates in new object
 d <- cbind.data.frame(xy, vals)
@@ -153,6 +165,11 @@ x <- matrix(d$MAT[x], nrow=NROW(x), ncol=NCOL(x))[i,]
 j <- apply(x, 1, function(x) which.min(is.na(x))) # col index nearest
 d$MAT[i] <- x[cbind(1:NROW(x), j)]    # assign nearest non-NA
 rm(i,j,x) # cleanup
+
+
+### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
+# TODO
+
 
 ### for each species, get niche positions and breadth (as 'traits')
 tr <- sapply(sort(unique(d$spe)),
