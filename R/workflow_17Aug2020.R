@@ -2,7 +2,7 @@
 #
 #  Workflow of analysis
 #
-#    Rob Smith, phytomosaic@gmail.com, 17 Aug 2020
+#    Rob Smith, phytomosaic@gmail.com, 20 Aug 2020
 #
 ##      GNU General Public License, Version 3.0    ###################
 
@@ -15,48 +15,45 @@ require(viridis)    # for plotting color scales
 require(phytools)   # for phylogenetic comparative tasks
 require(sp)         # for spatial tasks
 require(raster)     # for spatial tasks
-require(FNN)        # to assign env values from nearest neighbors, when NA
 require(data.table) # for memory-safe handling of large files
 require(CoordinateCleaner) # for obvious
+
 ### read GBIF individual species files, binding them together
-#     (rows = occurrences, cols = species+lon+lat)
 `f` <- function(x, keepcols=NULL, ...) {
   cat(round(file.info(x)$size/1024^2,1),', ') # file size, in MB
-  out <- data.table::fread(x, header = T, dec = '.', fill = T, data.table = T, 
-                           select = keepcols, integer64='character', ...)
-  return(out)
+  return(data.table::fread(x, header = T, dec = '.', fill = T, data.table = T, 
+                           select = keepcols, integer64='character', ...))
 }
 pth <- './data_raw/gbif/data_raw_gbif/'
-j   <- c('key','species','decimalLatitude','decimalLongitude','issues','year')
+j   <- c('species','decimalLatitude','decimalLongitude')
 fnm <- list.files(pth, pattern='.csv', full.names=T)
 xy  <- rbindlist(lapply(fnm, f, keepcols=j), fill=T) # ! ! TIMEWARN ! ! 3-4 min
 setnames(xy, names(xy), tolower(names(xy))) # cleanup column names
 setnames(xy, c('decimallatitude','decimallongitude'), c('lat','lon')) # simplify
+xy$species <- ecole::clean_text(xy$species) # cleanup taxon names
 dim(xy) # 878681 observations
 
 ### filter occurrences (duplicates, artificial coords, etc)
 sum(duplicated(xy))         # 7638 duplicates flagged for removal
 xy  <- xy[!duplicated(xy),] # remove duplicates
-### clean coordinates ('seas' test removes ~10% of all occurrences! dont use)
 flg <- CoordinateCleaner::clean_coordinates(
   x = xy, lon='lon', lat='lat',
   tests = c('capitals','centroids','equal','gbif','institutions','zeros'),
   capitals_rad=250, centroids_rad=250, centroids_detail='country', inst_rad=100)
-sum(flg$.summary == 0)   # 3663 were flagged for removal
+sum(flg$.summary == 0)      # 3663 were flagged for removal
 dim(flg)[[1]] - sapply(flg[,grep('\\.', names(flg))], function(i) sum(i)) 
-xy <- xy[flg$.summary,]  # exclude 3663 records flagged by ANY test
-dim(xy)                  # 867380 observations
-rm(f,flg,fnm,j,pth)      # cleanup environment
-gc()
+xy <- xy[flg$.summary,]     # exclude 3663 records flagged by ANY test
+dim(xy)                     # 867380 observations
+rm(f,flg,fnm,j,pth)         # cleanup environment
 
-### remove species having too few occurrences (less than 10)
-frq <- table(xy$species) # species frequencies
+### remove species with fewer than 10 occurrences
+frq <- table(xy$species)    # species frequencies
 set_par(2) ; hist(frq, breaks=55) ; hist(log10(1+frq), breaks=55)
 length(unique(xy$species))         # 2854 taxa total
 sum(frq < 10)                      # 490 taxa are too infrequent to analyze
 length(j <- names(frq[frq >= 10])) # 2364 taxa to keep
 xy <- xy[xy$species %in% j]
-dim(xy)                  # 865255 observations
+dim(xy)                     # 865255 observations
 
 # ### obtain MERRAclim climate data
 # yr <- c('80s','90s','00s')
@@ -72,19 +69,17 @@ dim(xy)                  # 865255 observations
 #               type='GTiff', overwrite=T)
 # }
 
-### read in 1980-2010 30-y climate normals (from MERRAclim)
+### read in 1980-2010 30-y climate normals (from MERRAclim), ~5-km resolution
 pth     <- './data_raw/merraclim/'
 fnm     <- list.files(pth, pattern ='\\.tif$', full.names=T)
 r       <- stack(fnm)
 trg_prj <- projection(r)                     # raster projection
-# png('./fig/fig_00_climatevars.png', wid=8.5, hei=8.5, units='in',
-#     bg='transparent', res=500)
-# set_par(1)
-# plot(r, col=viridis::inferno(99, begin=0.1, end=0.95), axes=F)
-# # require(maptools)
-# # data(wrld_simpl)
-# # plot(wrld_simpl, add=TRUE)
-# dev.off()
+png('./fig/fig_00_climatevars.png', wid=8.5, hei=8.5, units='in',
+    bg='transparent', res=500)
+set_par(1)
+plot(r, col=viridis::inferno(99, begin=0.1, end=0.95), axes=F, box=F)
+data(wrld_simpl,package='maptools'); plot(wrld_simpl,add=T); rm(wrld_simpl)
+dev.off()
 
 ### convert coordinates to spatial object
 `make_xy` <- function(xy, crs, ...) {          # reproject points
@@ -94,108 +89,107 @@ trg_prj <- projection(r)                     # raster projection
 }
 xy <- make_xy(xy, crs=trg_prj)
 rm(make_xy,pth,fnm,trg_prj)
-# save(xy, file='./data/xy.rda')  # save intermediate result to save time
+save(xy, file='./data/xy.rda')  # save intermediate result to save time
 load(file='./data/xy.rda',verbose=T)
 
 ### extract env values at query coordinates
-vals <- raster::extract(r,xy) # <<--- SLOW WAY!
-# ### FAST WAY! extract values at query coordinates, in CHUNKS
-# `extract_raster` <- function(r, xy, breaks=20, ...) {
-#   time_start <- Sys.time()
-#   if(!class(r) %in% c('RasterLayer','RasterStack')) {
-#     stop('r must be `RasterLayer` object')
+vals <- raster::extract(r,xy)      # ! ! ! TIMEWARN ! ! ! ~10 min
+d    <- cbind.data.frame(xy, vals) # values and coordinates in new object
+rm(xy, vals, r)
+d$optional <- NULL
+d <- d[!is.na(d$X2_5_mean_mean80sto00s_bio1),] # remove 50 NA values
+names(d) <- gsub('X2_5_mean_mean80sto00s_','', names(d)) # clean names
+d[,paste0('bio',c(1,2,4:11))] <- 
+  d[,paste0('bio',c(1,2,4:11))] * 0.10 # rescale temperature units to degrees C
+dim(d)  # 865205 observations
+save(d, file='./data/d.rda')
+
+### clean restart here ???????????????????????????????
+rm(list=ls())
+gc()
+require(ecole)      # for plotting and convenience functions
+require(viridis)    # for plotting color scales
+require(phytools)   # for phylogenetic comparative tasks
+require(data.table) # for memory-safe handling of large files
+load(file='./data/d.rda', verbose=T)
+print(object.size(d), units='MB')
+head(d)
+
+# TODO memory overrun!
+# ### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
+# ###   quantiles of grid-cell means per species = niche traits
+# `bingrid_multi` <- function (x, field='', nr=100, nc=150, 
+#                              xmn=-180, xmx=180, ymn=-90, ymx=90, ...) {
+#   t_start <- Sys.time()
+#   cat(paste0('Began at: ', t_start, '\n'))
+#   `bingrid_q` <- function (...) {
+#     hascol <- all(c('lat','lon','species',field) %in% names(x))
+#     if (!hascol) stop('need columns `lat`,`lon`,`species` and `field`')
+#     # rasterize: grid-cell means BY SPECIES
+#     b <- by(data = x[,!colnames(x) %in% 'species'],
+#             INDICES = x[,'species'],
+#             FUN = function(a) {
+#               raster::rasterize(
+#                 a[,c('lon','lat')],
+#                 raster::raster(nrows=nr,ncols=nc,xmn=xmn,xmx=xmx,ymn=ymn,ymx=ymx),
+#                 field = as.matrix(a[,field]),
+#                 fun   = mean,
+#                 na.rm = TRUE)}, simplify = FALSE)
+#     b <- sapply(b, raster::getValues) # grid-cell-means (rows) by species (cols)
+#     # for each species, get 'traits' = niche positions and breadth
+#     tr <- apply(b, 2,
+#                 function(i) {
+#                   i   <- na.omit(i)
+#                   out <- c(quantile(i, probs=c(0.05,0.50,0.95)), stats::IQR(i))
+#                   names(out) <- c('q05','q50','q95','iqr')
+#                   out
+#                 })
+#     return(tr)
 #   }
-#   if(!inherits(xy,'SpatialPoints')) {
-#     stop('xy must be `SpatialPoints` object')
-#   }
-#   # divide extent into equal area chunks for speed
-#   `make_chunk` <- function(e, breaks, ...){
-#     m  <- matrix(NA, nrow=breaks, ncol=4,
-#                  dimnames=list(NULL,
-#                                c('xmin','xmax','ymin','ymax')))
-#     rng <- range(c(e[1],e[2]))  # x dimension
-#     b   <- seq(rng[1], rng[2], length=breaks+1)
-#     for(i in 1:(breaks)){
-#       m[i,1:2] <- c(b[i], b[i+1])
-#     }
-#     rng <- range(c(e[3],e[4]))  # y dimension
-#     b   <- seq(rng[1], rng[2], length=breaks+1)
-#     for(i in 1:(breaks)){
-#       m[i,3:4] <- c(b[i], b[i+1])
-#     }
-#     m <- as.matrix(merge(m[,1:2],m[,3:4]))
-#     m
-#   }
-#   ck     <- make_chunk(e=extent(r), breaks=breaks)
-#   nchunk <- dim(ck)[[1]]
-#   npts   <- dim(xy@coords)[[1]]
-#   p      <- matrix(NA, nrow=npts, ncol=nchunk)
-#   pb     <- pbCreate(nchunk, progress='text', style=3, ...)
-#   for(i in 1:nchunk) {
-#     pbStep(pb, i)
-#     p[,i] <- raster::extract(crop(r, extent(ck[i,])), xy,
-#                              progress='text')
-#   }
-#   # collect chunks into one vector 'tmp'
-#   nonNA <- !is.na(p)
-#   tmp   <- vector('numeric', npts)
-#   for(i in 1:npts){
-#     if( all(!nonNA[i,]) ){
-#       tmp[i] <- NA   # some points were not queryable
-#     } else {
-#       tmp[i] <- p[i, min(which(nonNA[i,]))]
-#     }
-#   }
-#   # assemble matrix
-#   p <- matrix(c(1:npts,tmp),nrow=npts,ncol=2,dimnames=list(NULL,c('pt','val')))
-#   pbClose(pb)
-#   time_end <- Sys.time()
-#   cat('Time elapsed:', time_end - time_start)
-#   return(p)
+#   # apply to each field
+#   lst <- lapply(field, FUN=function(i) bingrid_q(x, field=i))
+#   res <- do.call(rbind, lst)
+#   rownames(res) <- paste0(rep(field,each=4),'_',rownames(res))
+#   res <- t(res)
+#   # timing
+#   t_end  <- Sys.time()
+#   t_diff <- round(difftime(t_end, t_start, units="mins"),2)
+#   cat(paste0('Completed at: ', t_end),
+#       '\n   after time elapsed of:', t_diff, 'minutes')
+#   return(res) # rows = species, cols = climate traits
 # }
-# vals <- extract_raster(r, xy, breaks=20)      # env values
+# b <- bingrid_multi(d, field=paste0('bio',1:19))
+# # save(b, file='./data/b.rda')
+# load(file='./data/b.rda', verbose=T)
+# print(object.size(b), units='MB')
 
-### collect values and coordinates in new object
-d <- cbind.data.frame(xy, vals)
-
-### assign nearest-neighbor value if is NA (mostly at water boundaries)
-i <- is.na(d$MAT)
-x <- FNN::get.knn(d[,.(lon,lat)], k=50)$nn.index  # index 50 neighbors
-x <- matrix(d$MAT[x], nrow=NROW(x), ncol=NCOL(x))[i,]
-j <- apply(x, 1, function(x) which.min(is.na(x))) # col index nearest
-d$MAT[i] <- x[cbind(1:NROW(x), j)]    # assign nearest non-NA
-rm(i,j,x) # cleanup
-
-
-### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
-# TODO
-
-
-### for each species, get niche positions and breadth (as 'traits')
-tr <- sapply(sort(unique(d$spe)),
-             function(i) {
-               x <- d[d$spe==i,'MAP'] # TODO: more climate variables
-               x <- na.omit(x)
-               out <- c(quantile(x, probs=c(0.05,0.50,0.95)), stats::IQR(x))
-               names(out) <- c('q05','q50','q95','iqr')
-             })
-cc <- colvec(tr)
-
+### for each species and each biovar, get 'traits' = niche positions and breadth
+tr <- lapply(d[,paste0('bio',1:19)], function(var) { # for each biovar
+  do.call('rbind', 
+          tapply(var, d$species, # for each species
+                 function(i) {
+                   i   <- na.omit(i)
+                   out <- c(stats::quantile(i, probs=c(0.05,0.50,0.95), na.rm=T),
+                            stats::IQR(i, na.rm=T))
+                   names(out) <- c('q05','q50','q95','iqr')
+                   out
+                 }))})
+str(tr,1) # 19 matrices, where rows = species and cols = niche positions/breadth
+head(tr[[1]])
 
 ### read in the phylogeny (Nelsen et al 2020 PNAS)
 p <- read.tree('./data_raw/Lecanoromycetes_ML_Tree_Timescaled')
-# plot(p, cex=0.2)
 # plot(p, cex=0.2, type='fan')
-# pspe <- p$tip.label               # species names
-# pgen <- sub('\\_.*', '', pspe)    # genera names
+ptax <- p$tip.label               # taxa names
+# pgen <- sub('\\_.*', '', ptax)    # genera names
+length(ptax) # full phylogeny has 3373 taxa
 
 ### prune to keep only GBIF-valid species
-has_gbif <- unique(d$spe)
-p <- keep.tip(p, tip = na.omit(match(has_gbif, pspe)))
+p <- keep.tip(p, tip = na.omit(match(unique(d$spe), ptax)))
 
 ### prune to keep only taxa with sufficient support (>100 occurrences?)
 has_support <- NA
-p <- keep.tip(p, tip = na.omit(match(has_support, pspe)))
+p <- keep.tip(p, tip = na.omit(match(has_support, ptax)))
 
 ### phylogenetic signal of climatic niches (climate niche conservatism)
 ?phytools::phylosig
@@ -274,7 +268,6 @@ names(ccc) <- 1:(length(p$tip) + p$Nnode)
 phylomorphospace(p, X, label='horizontal', fsize=0.7,
                  control=list(col.node=ccc))
 
-
 # ### variable names, just for reference:
 #   bio1  = Mean annual temperature
 #   bio2  = Mean diurnal range (mean of max temp - min temp)
@@ -294,5 +287,12 @@ phylomorphospace(p, X, label='horizontal', fsize=0.7,
 #   bio16 = Precipitation of wettest quarter
 #   bio17 = Precipitation of driest quarter
 #   bio18 = Precipitation of warmest quarter
+
+### human-readable names, for publication
+nm <- c('Ann T','T diurnal rng','Isothermality','T seasnlty','Max T warm mo',
+        'Min T cold mo','T ann rng','T wet qtr','T dry qtr','T warm qtr',
+        'T cold qtr','Ann P','P wet mo','P dry mo','P seasnlty','P wet qtr',
+        'P dry qtr','P warm qtr','P cold qtr')
+
 
 ####    END    ####
