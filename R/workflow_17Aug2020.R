@@ -140,8 +140,8 @@ head(d)
 #     tr <- apply(b, 2,
 #                 function(i) {
 #                   i   <- na.omit(i)
-#                   out <- c(quantile(i, probs=c(0.05,0.50,0.95)), stats::IQR(i))
-#                   names(out) <- c('q05','q50','q95','iqr')
+#                   out <- c(quantile(i, probs=c(0.05,0.50,0.95)), stats::mad(i))
+#                   names(out) <- c('q05','q50','q95','mad')
 #                   out
 #                 })
 #     return(tr)
@@ -170,8 +170,8 @@ tr <- lapply(d[,paste0('bio',1:19)], function(var) { # for each biovar
                  function(i) {
                    i   <- na.omit(i)
                    out <- c(stats::quantile(i, probs=c(0.05,0.50,0.95), na.rm=T),
-                            stats::IQR(i, na.rm=T))
-                   names(out) <- c('q05','q50','q95','iqr')
+                            stats::mad(i, na.rm=T))
+                   names(out) <- c('q05','q50','q95','mad')
                    out
                  }))})
 str(tr,1) # 19 matrices, where rows = species and cols = niche positions/breadth
