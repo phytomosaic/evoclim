@@ -105,17 +105,7 @@ d[,paste0('bio',c(1,2,4:11))] <-
   d[,paste0('bio',c(1,2,4:11))] * 0.10 # rescale temperature units to degrees C
 dim(d)  # 632431 observations, beautiful clean complete data
 save(d, file='./data/d.rda')
-
-### clean restart here ???????????????????????????????
-rm(list=ls())
-gc()
-require(ecole)      # for plotting and convenience functions
-require(viridis)    # for plotting color scales
-require(phytools)   # for phylogenetic comparative tasks
-require(data.table) # for memory-safe handling of large files
 load(file='./data/d.rda', verbose=T)
-print(object.size(d), units='MB')
-head(d)
 
 # TODO memory overrun!
 # ### bin occurrences to grid (better than thinning, Smith et al 2020 J Biogeogr)
@@ -178,8 +168,20 @@ tr <- lapply(d[,paste0('bio',1:19)], function(var) {
                  }))})
 tr <- do.call('cbind', tr)
 colnames(tr) <- paste0(rep(paste0('bio',1:19),each=4),'_',colnames(tr))
+save(tr, file='./data/tr.rda')
+
+
+
+
+### clean restart here ???????????????????????????????
+rm(list=ls())
+gc()
+require(ecole)      # for plotting and convenience functions
+require(viridis)    # for plotting color scales
+require(phytools)   # for phylogenetic comparative tasks
+load(file='./data/tr.rda', verbose=T)
+print(object.size(tr), units='MB')
 head(tr) # traits, where rows = species and cols = niche positions/breadth
-rm(d)
 
 ### read in the phylogeny (Nelsen et al 2020 PNAS)
 p <- read.tree('./data_raw/Lecanoromycetes_ML_Tree_Timescaled')
@@ -201,8 +203,7 @@ rm(ptax,otax)
 
 ### phylogenetic signal of climatic niches (climate niche conservatism)
 #     best metric is lambda, according to doi:10.1111/j.2041-210X.2012.00196.x
-?phytools::phylosig
-lam <- apply(tr, 2, FUN=function(j) {
+lam <- apply(tr, 2, FUN=function(j) { # ! ! ! TIMEWARN ! ! ! ~5 min per trait
   names(j) <- rownames(tr)
   x <- phytools::phylosig(p, j, method='lambda', test=T, nsim=999)
   round(c(lambda=x$lambda, pval_l=x$P), 4)})
@@ -214,19 +215,19 @@ png('./fig/fig_01_phy_heatmap.png', wid=9.5, hei=16.5, units='in',
 phylo.heatmap(p, tr, 0.2, viridis::inferno(99), standardize=T)
 dev.off()
 
-### color tips by climate tolerance value
+### pick a SINGLE climate niche trait
+x  <- setNames(tr[,'bio1_q50'], rownames(tr)) # bio1_q50 = 'thermal centroid'
+cc <- ecole::colvec(x, begin=0.1, end=0.95, alpha=1)
+(rng <- range(x))
+
+### color tips by climate niche value
 png('./fig/fig_02_phy_heattips.png', wid=9.5, hei=16.5, units='in',
     bg='transparent', res=500)
-x  <- setNames(tr[,'bio12_q05'], rownames(tr))        # lowest extreme of MAP
-cc <- ecole::colvec(x, begin=0.1, end=0.95, alpha=1) # lowest extreme of MAP
 plot(p, cex=0.2, label.offset=5, no.margin=T, tip.col=cc) 
 # tiplabels(pch = 21, bg = cc, cex = 0.8, adj = 4)
 dev.off()
 
 ### continuous trait reconstruction ! ! ! TIMEWARN ! ! ! ~1-2 min per biovar
-x   <- setNames(tr[,'bio1_q50'], rownames(tr)) # central value of MAT (thermal centroid)
-(rng <- range(x))
-cc  <- ecole::colvec(x, begin=0.1, end=0.95, alpha=1)
 trm <- contMap(p, x, lims=c(-20,30), plot=FALSE) # _across branches_
 trm$cols[1:length(trm$cols)] <- viridis::inferno(length(trm$cols))
 # fa <- fastAnc(p, x) # _at each node_
@@ -251,13 +252,19 @@ dev.off()
 # phenogram(p, tr, fsize=0.6, spread.costs=c(1,0.5))
 # phenogram(p, tr, fsize=0.6, spread.costs=c(1,0), colors=trm$cols)
 
-### rates of trait evolution: 
+### TODO rates of trait evolution: 
 ?ratebytree
 ratebytree(trees, x, type='continuous', ...)
 # `trees`	=
 #   an object of class "multiPhylo". If x consists of a list of different traits
 #   to be compared, then trees could also be a simple set of duplicates of the
 #   same tree, e.g., rep(tree,length(x)).
+
+### human-readable names, for publication
+nm <- c('Ann T','T diurnal rng','Isothermality','T seasnlty','Max T warm mo',
+        'Min T cold mo','T ann rng','T wet qtr','T dry qtr','T warm qtr',
+        'T cold qtr','Ann P','P wet mo','P dry mo','P seasnlty','P wet qtr',
+        'P dry qtr','P warm qtr','P cold qtr')
 
 # ### variable names, just for reference:
 #   bio1  = Mean annual temperature
@@ -278,12 +285,5 @@ ratebytree(trees, x, type='continuous', ...)
 #   bio16 = Precipitation of wettest quarter
 #   bio17 = Precipitation of driest quarter
 #   bio18 = Precipitation of warmest quarter
-
-### human-readable names, for publication
-nm <- c('Ann T','T diurnal rng','Isothermality','T seasnlty','Max T warm mo',
-        'Min T cold mo','T ann rng','T wet qtr','T dry qtr','T warm qtr',
-        'T cold qtr','Ann P','P wet mo','P dry mo','P seasnlty','P wet qtr',
-        'P dry qtr','P warm qtr','P cold qtr')
-
 
 ####    END    ####
