@@ -25,35 +25,39 @@ require(CoordinateCleaner) # for obvious
                            select = keepcols, integer64='character', ...))
 }
 pth <- './data_raw/gbif/data_raw_gbif/'
-j   <- c('species','decimalLatitude','decimalLongitude')
+j   <- c('decimalLatitude','decimalLongitude') # 'species'
 fnm <- list.files(pth, pattern='.csv', full.names=T)
-xy  <- rbindlist(lapply(fnm, f, keepcols=j), fill=T) # ! ! TIMEWARN ! ! 3-4 min
+nm  <- gsub('_gbif_bioclim_records.csv', '', fnm)
+nm  <- gsub('./data_raw/gbif/data_raw_gbif/', '', nm)
+fnm <- setNames(fnm, nm)  ;  rm(nm)
+xy  <- rbindlist(lapply(fnm, f, keepcols=j), 
+                 fill=T, idcol='species') # ! ! ! TIMEWARN ! ! ! ~3-4 min
 setnames(xy, names(xy), tolower(names(xy))) # cleanup column names
 setnames(xy, c('decimallatitude','decimallongitude'), c('lat','lon')) # simplify
-xy$species <- ecole::clean_text(xy$species) # cleanup taxon names
 dim(xy) # 878681 observations
+head(xy)
 
 ### filter occurrences (duplicates, artificial coords, etc)
-sum(duplicated(xy))         # 7638 duplicates flagged for removal
+sum(duplicated(xy))         # 245479 duplicates flagged for removal
 xy  <- xy[!duplicated(xy),] # remove duplicates
 flg <- CoordinateCleaner::clean_coordinates(
   x = xy, lon='lon', lat='lat',
   tests = c('capitals','centroids','equal','gbif','institutions','zeros'),
   capitals_rad=250, centroids_rad=250, centroids_detail='country', inst_rad=100)
-sum(flg$.summary == 0)      # 3663 were flagged for removal
+sum(flg$.summary == 0)      # 1621 were flagged for removal
 dim(flg)[[1]] - sapply(flg[,grep('\\.', names(flg))], function(i) sum(i)) 
-xy <- xy[flg$.summary,]     # exclude 3663 records flagged by ANY test
-dim(xy)                     # 867380 observations
+xy <- xy[flg$.summary,]     # exclude 1621 records flagged by ANY test
+dim(xy)                     # 633202 observations
 rm(f,flg,fnm,j,pth)         # cleanup environment
 
-### remove species with fewer than 10 occurrences
+### remove species with fewer than 5 occurrences
 frq <- table(xy$species)    # species frequencies
 set_par(2) ; hist(frq, breaks=55) ; hist(log10(1+frq), breaks=55)
-length(unique(xy$species))         # 2854 taxa total
-sum(frq < 10)                      # 490 taxa are too infrequent to analyze
-length(j <- names(frq[frq >= 10])) # 2364 taxa to keep
+length(unique(xy$species))        # 2906 taxa total
+sum(frq < 5)                      # 329 taxa are too infrequent to analyze
+length(j <- names(frq[frq >= 5])) # 2577 taxa to keep
 xy <- xy[xy$species %in% j]
-dim(xy)                     # 865255 observations
+dim(xy)                     # 632474 observations
 
 # ### obtain MERRAclim climate data
 # yr <- c('80s','90s','00s')
@@ -74,12 +78,12 @@ pth     <- './data_raw/merraclim/'
 fnm     <- list.files(pth, pattern ='\\.tif$', full.names=T)
 r       <- stack(fnm)
 trg_prj <- projection(r)                     # raster projection
-png('./fig/fig_00_climatevars.png', wid=8.5, hei=8.5, units='in',
-    bg='transparent', res=500)
-set_par(1)
-plot(r, col=viridis::inferno(99, begin=0.1, end=0.95), axes=F, box=F)
-data(wrld_simpl,package='maptools'); plot(wrld_simpl,add=T); rm(wrld_simpl)
-dev.off()
+# png('./fig/fig_00_climatevars.png', wid=8.5, hei=8.5, units='in',
+#     bg='transparent', res=500)
+# set_par(1)
+# plot(r, col=viridis::inferno(99, begin=0.1, end=0.95), axes=F, box=F)
+# data(wrld_simpl,package='maptools'); plot(wrld_simpl,add=T); rm(wrld_simpl)
+# dev.off()
 
 ### convert coordinates to spatial object
 `make_xy` <- function(xy, crs, ...) {          # reproject points
@@ -88,20 +92,18 @@ dev.off()
   return(sp::spTransform(xy, crs))
 }
 xy <- make_xy(xy, crs=trg_prj)
-rm(make_xy,pth,fnm,trg_prj)
-save(xy, file='./data/xy.rda')  # save intermediate result to save time
-load(file='./data/xy.rda',verbose=T)
 
 ### extract env values at query coordinates
 vals <- raster::extract(r,xy)      # ! ! ! TIMEWARN ! ! ! ~10 min
 d    <- cbind.data.frame(xy, vals) # values and coordinates in new object
-rm(xy, vals, r)
+rm(xy, vals, r, make_xy, pth, fnm, trg_prj) # cleanup
 d$optional <- NULL
-d <- d[!is.na(d$X2_5_mean_mean80sto00s_bio1),] # remove 50 NA values
+sum(is.na(d$X2_5_mean_mean80sto00s_bio1))      # 43 NA values
+d <- d[!is.na(d$X2_5_mean_mean80sto00s_bio1),] # remove 43 NA values
 names(d) <- gsub('X2_5_mean_mean80sto00s_','', names(d)) # clean names
 d[,paste0('bio',c(1,2,4:11))] <- 
   d[,paste0('bio',c(1,2,4:11))] * 0.10 # rescale temperature units to degrees C
-dim(d)  # 865205 observations
+dim(d)  # 632431 observations, beautiful clean complete data
 save(d, file='./data/d.rda')
 
 ### clean restart here ???????????????????????????????
@@ -164,9 +166,9 @@ head(d)
 # print(object.size(b), units='MB')
 
 ### for each species and each biovar, get 'traits' = niche positions and breadth
-tr <- lapply(d[,paste0('bio',1:19)], function(var) { # for each biovar
+tr <- lapply(d[,paste0('bio',1:19)], function(var) {
   do.call('rbind', 
-          tapply(var, d$species, # for each species
+          tapply(var, d$species,
                  function(i) {
                    i   <- na.omit(i)
                    out <- c(stats::quantile(i, probs=c(0.05,0.50,0.95), na.rm=T),
@@ -174,99 +176,88 @@ tr <- lapply(d[,paste0('bio',1:19)], function(var) { # for each biovar
                    names(out) <- c('q05','q50','q95','mad')
                    out
                  }))})
-str(tr,1) # 19 matrices, where rows = species and cols = niche positions/breadth
-head(tr[[1]])
+tr <- do.call('cbind', tr)
+colnames(tr) <- paste0(rep(paste0('bio',1:19),each=4),'_',colnames(tr))
+head(tr) # traits, where rows = species and cols = niche positions/breadth
+rm(d)
 
 ### read in the phylogeny (Nelsen et al 2020 PNAS)
 p <- read.tree('./data_raw/Lecanoromycetes_ML_Tree_Timescaled')
 # plot(p, cex=0.2, type='fan')
-ptax <- p$tip.label               # taxa names
-# pgen <- sub('\\_.*', '', ptax)    # genera names
-length(ptax) # full phylogeny has 3373 taxa
+ptax <- p$tip.label  # taxa names in phylogeny
+otax <- rownames(tr) # taxa names in GBIF occurrences
+length(ptax)         # full phylogeny has 3373 taxa
+length(otax)         # occurrence data has 2577 taxa
+all(otax %in% ptax)  # expect TRUE
+all(rownames(tr) %in% p$tip.label)
 
-### prune to keep only GBIF-valid species
-p <- keep.tip(p, tip = na.omit(match(unique(d$spe), ptax)))
-
-### prune to keep only taxa with sufficient support (>100 occurrences?)
-has_support <- NA
-p <- keep.tip(p, tip = na.omit(match(has_support, ptax)))
+### proceed with pruning tree and occurrences to exact matches
+p    <- keep.tip(p, tip = otax) # keep only taxa in GBIF occurrences
+ptax <- p$tip.label  # (reduced) taxa names in phylogeny
+otax <- rownames(tr) # (reduced) taxa names in GBIF occurrences
+length(ptax)         # 2577 exact matches
+length(otax)         # 2577 exact matches
+rm(ptax,otax)
 
 ### phylogenetic signal of climatic niches (climate niche conservatism)
+#     best metric is lambda, according to doi:10.1111/j.2041-210X.2012.00196.x
 ?phytools::phylosig
-lam <- sapply(n, FUN=function(j) {
+lam <- apply(tr, 2, FUN=function(j) {
   names(j) <- rownames(tr)
-  l1 <- phytools::phylosig(p, j, method='K', test=T, nsim=999)
-  l2 <- phytools::phylosig(p, j, method='lambda', test=T, nsim=999)
-  round(c(k=l1$K, pval_k=l1$P, lambda=l2$lambda, pval_l=l2$P), 4)})
+  x <- phytools::phylosig(p, j, method='lambda', test=T, nsim=999)
+  round(c(lambda=x$lambda, pval_l=x$P), 4)})
 lam
 
 ### visualize ALL climate niche values across phylogeny
-phylo.heatmap(p, tr, 0.4, colors=viridis::inferno(99), standardize=T)
-
-### estimating diversification rates: plot number of lineages vs time
-###    http://www.phytools.org/Cordoba2017/ex/11/LTT-and-gamma.html
-(obj <- ltt(p,plot=FALSE))
-plot(obj, log='y', log.lineages=FALSE)
-# line of expecation under a pure-birth prediction:
-h <- max(nodeHeights(p))
-x <- seq(0,h,by=h/100)
-b <- (log(Ntip(p))-log(2))/h
-lines(x,2*exp(b*x),col=2,lty=2,lwd=2)
-# simulate 100 similar trees:
-trees <- pbtree(b=b,n=Ntip(p),t=h,nsim=100,method='direct',quiet=T)
-obj   <- ltt(trees, plot=FALSE)
-plot(obj, col='grey', log.lineages=T,main='Observed vs simulated LTTs')
-lines(c(0,h),log(c(2,Ntip(p))),lty=2,lwd=2,col=4)
-ltt(p,add=TRUE,col=2,lwd=2) # overlay original tree
-# alternatively:
-ltt95(trees, log=T, plot=F)
-ltt(p,add=TRUE,col=2,lwd=2,log.lineages=F) # overlay original tree
-
-### color tips by climate tolerance value
-# tiff('phy_FIA_only.tif', wid=4.5, hei=5, unit='in', compr='lzw+p', res=600)
-layout(matrix(1:2, 1,2))
-plot(p, cex=0.3, label.offset=5, no.margin=T)
-plot(p, cex=0.3, label.offset=5, no.margin=T, tip.col=cc)
-# tiplabels(pch = 21, bg = cc, cex = 0.8, adj = 4)
-# dev.off()
-
-### continuous trait reconstruction _across branches_
-trm <- contMap(p, x=tr, lims=c(16.5,33.5), plot=FALSE)
-trm$cols[1:length(trm$cols)] <- viridis::inferno(length(trm$cols))
-### continuous trait reconstruction _at each node_
-fa  <- fastAnc(p, tr)
-
-# across branches:
-plot(trm, fsize=0.4, lwd=2, outline=F)
-# at each node:
-plot(p, cex=0.3, label.offset=5, no.margin=T, tip.col=cc,edge.width=2)
-nodelabels(pch=19, col = colvec(fa), cex = 1)
-tiplabels(pch=19, col = colvec(tr), cex = 1)
-
-### plot ancestral trait reconstruction
-png('./fig/phy_traitreconstruction.tif', 
-    wid=3.5, hei=7.5, unit='in', bg='transparent', res=700)
-plot(trm, fsize=0.4, lwd=3, outline=F,
-     leg.txt='Upper thermal tolerance (\u00b0C)')
-nodelabels(pch=19, col = colvec(fa), cex = 0.9)
-tiplabels(pch=19, col = colvec(tr,alpha=1), cex = 0.8)
+png('./fig/fig_01_phy_heatmap.png', wid=9.5, hei=16.5, units='in',
+    bg='transparent', res=500)
+phylo.heatmap(p, tr, 0.2, viridis::inferno(99), standardize=T)
 dev.off()
 
-### traitgram: trait (y) vs time (x)
-phenogram(p, tr, fsize=0.6, spread.costs=c(1,0.5))
-phenogram(p, tr, fsize=0.6, spread.costs=c(1,0), colors=trm$cols)
+### color tips by climate tolerance value
+png('./fig/fig_02_phy_heattips.png', wid=9.5, hei=16.5, units='in',
+    bg='transparent', res=500)
+x  <- setNames(tr[,'bio12_q05'], rownames(tr))        # lowest extreme of MAP
+cc <- ecole::colvec(x, begin=0.1, end=0.95, alpha=1) # lowest extreme of MAP
+plot(p, cex=0.2, label.offset=5, no.margin=T, tip.col=cc) 
+# tiplabels(pch = 21, bg = cc, cex = 0.8, adj = 4)
+dev.off()
 
-### phylomorphospace
-names(n)
-par(las=1, bty='L', pty='s')
-X <- n[,c('p95_mwmt','p95_cmd')]
-phylomorphospace(p, X, label='horizontal', fsize=0.7)
-# colored by trait
-names(cc) <- p$tip.label
-ccc <- c(cc[p$tip.label], rep('black', p$Nnode))
-names(ccc) <- 1:(length(p$tip) + p$Nnode)
-phylomorphospace(p, X, label='horizontal', fsize=0.7,
-                 control=list(col.node=ccc))
+### continuous trait reconstruction ! ! ! TIMEWARN ! ! ! ~1-2 min per biovar
+x   <- setNames(tr[,'bio1_q50'], rownames(tr)) # central value of MAT (thermal centroid)
+(rng <- range(x))
+cc  <- ecole::colvec(x, begin=0.1, end=0.95, alpha=1)
+trm <- contMap(p, x, lims=c(-20,30), plot=FALSE) # _across branches_
+trm$cols[1:length(trm$cols)] <- viridis::inferno(length(trm$cols))
+# fa <- fastAnc(p, x) # _at each node_
+
+### plot ancestral trait reconstruction
+png('./fig/fig_03_phy_traitreconstruction.png', wid=6.5, hei=16.5, units='in',
+    bg='transparent', res=1000)
+plot(trm, fsize=0.1, lwd=1, outline=F, leg.txt='Thermal centroid (\u0b00C)')
+# nodelabels(pch=19, col = colvec(fa), cex = 0.9)
+# tiplabels(pch=19, col=colvec(tr,alpha=1), cex = 0.1)
+dev.off()
+
+### plot ancestral trait reconstruction (fan)
+png('./fig/fig_03_phy_traitreconstruction_fan.png', wid=8.5, hei=8.5, units='in',
+    bg='transparent', res=1000)
+plot(trm, fsize=0.1, lwd=1, outline=F, leg.txt='Thermal centroid (\u0b00C)', type='fan')
+# nodelabels(pch=19, col = colvec(fa), cex = 0.9)
+# tiplabels(pch=19, col=colvec(tr,alpha=1), cex = 0.1)
+dev.off()
+
+# ### traitgram: trait (y) vs time (x)
+# phenogram(p, tr, fsize=0.6, spread.costs=c(1,0.5))
+# phenogram(p, tr, fsize=0.6, spread.costs=c(1,0), colors=trm$cols)
+
+### rates of trait evolution: 
+?ratebytree
+ratebytree(trees, x, type='continuous', ...)
+# `trees`	=
+#   an object of class "multiPhylo". If x consists of a list of different traits
+#   to be compared, then trees could also be a simple set of duplicates of the
+#   same tree, e.g., rep(tree,length(x)).
 
 # ### variable names, just for reference:
 #   bio1  = Mean annual temperature
