@@ -16,7 +16,7 @@ require(phytools)   # for phylogenetic comparative tasks
 require(sp)         # for spatial tasks
 require(raster)     # for spatial tasks
 require(data.table) # for memory-safe handling of large files
-require(CoordinateCleaner) # for obvious
+require(CoordinateCleaner) # for obviously cleaning coordinates
 
 ### read GBIF individual species files, binding them together
 `f` <- function(x, keepcols=NULL, ...) {
