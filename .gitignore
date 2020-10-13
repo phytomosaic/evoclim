@@ -40,3 +40,6 @@ vignettes/*.pdf
 
 # the raw data
 data_raw/
+
+# any figures output
+fig/
