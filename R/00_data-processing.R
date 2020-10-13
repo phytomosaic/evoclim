@@ -1,6 +1,6 @@
 ######################################################################
 #
-#  Workflow of analysis
+#  Data processing to get climate traits
 #
 #    Rob Smith, phytomosaic@gmail.com, 20 Aug 2020
 #
