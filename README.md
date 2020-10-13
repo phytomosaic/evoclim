@@ -34,25 +34,28 @@ devtools::install_github('phytomosaic/evoclim')
 1.  Ancestral state reconstruction of climate niches mapped onto the tree 
 1.  Estimate rates of climatic niche evolution  
 
-Then answer:
 
-* Which clades are narrow-niche “climate specialists” that may be extinction-prone?
-* Which clades are “climate losers” (low 95th percentiles) expected to decline with warming/drying (and “winners” for vice versa)
-* Which clades are faster-evolving, with faster rates of niche evolution, possibly better able to adapt to climate changes?
-* Green-algal faster/slower climate evolution than cyanolichens?
-* Which more sensitive: thermal, or moisture, or interactive predictors?
+## Questions
+
+1. Which traits more phylogenetically conserved: thermal, or moisture, or interactive predictors?
+    * how: compare phylogenetic signal (K) among each predictor
+
+1. Which clades are narrow-niche “climate specialists” that may be extinction-prone?
+    * how: map "niche breadth (mean abs deviation)" onto phylogeny, identify clades with narrowest breadth, test for phylo signal (K)
+
+1. Which clades are “climate losers” (low 95th percentiles) expected to decline with warming/drying (and “winners” for vice versa)
+    * how: map "niche maxima (95th percentiles)" onto phylogeny, identify clades where low maxima are approaching modern conditions and therefore "vulnerable", test for phylo signal (K)
+
+1. Which clades are faster-evolving, with faster rates of climatic niche evolution, possibly better able to adapt to imminent climate changes?
+    * how: BAMM if single trait; l1ou for multivariate.  w/l1ou, could also examine whether shifts into novel adaptive regimes concentrated early in the phylogeny (early-burst).
+
+1. Green-algal faster/slower climate evolution than cyanolichens?
+    * how: OUwie. or BAMM (see Folk et al. 2018 PNAS)
+
+1. To what degree is rate of diversification correlated with rate of climatic niche evolution?
+    * how: BAMM (see Folk et al. 2018 PNAS)
 
 
-## Load data
+## Questions/comments
 
-```r
-require(evoclim)
-?veg
-data(veg)
-d   <- veg
-xy  <- d$xy    # spatial
-spe <- d$spe   # species
-env <- d$env   # environment
-tra <- d$tra   # traits
-phy <- d$phy   # phylogeny
-```
+phytomosaic@gmail.com
