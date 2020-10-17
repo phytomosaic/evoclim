@@ -19,6 +19,8 @@ p  <- read.tree('./data/Lecanoromycetes_ML_Tree_Timescaled')
 p  <- keep.tip(p, tip = rownames(tr))
 tr <- tr[match(p$tip.label, rownames(tr)),]
 identical(rownames(tr), p$tip.label)      # expect TRUE
+system( paste0('cd ', wd) )      # change into working dir (system)
+setwd(wd)                        # change into working dir (R)
 
 ### PCA for either niche positions or niche breadth
 is_breadth <- grepl('mad', dimnames(tr)[[2]]) # split niche position vs breadth
@@ -43,41 +45,23 @@ write.table(tr_breadth, file = 'lichen_tra_brd.txt')  # trait breadth PCA
 rm(is_breadth, pc, pa, pb, tr_position, tr_breadth)
 
 ### setup dirs and filenames
-system( paste0('cd ', wd) )      # change into working dir (system)
-setwd(wd)                        # change into working dir (R)
 fnm_phy <- 'lichen_phy.tre'      # phylogeny
 fnm_tra <- 'lichen_tra_pos.txt'  # traits
 fnm_ctl <- 'lichen_ctl.txt'      # control (to be done below)
 system( 'ls -F' )                # check which files are in here
 list.files()                     # check which files are in here
 
-# ### PRIMATES
-# ### copy files into tmp working directory
-# pth <- '/home/rob/bamm/examples/traits/primatemass' # data dir
-# wd  <- '/home/rob/bamm/tmp'                         # temporary working dir
-# paste0(list.files(pth))                     # files in data dir
-# system( paste0('cp -R ', pth, ' ', wd) )    # copy to working dir
-# system( paste0('cd ', wd) )                 # change into working dir (system)
-# setwd(wd )                                  # change into working dir (R)
-# system( 'ls -F' )                           # check which files are in here
-# list.files()
-# ### define filenames
-# fnm_phy <- 'primates.tre'
-# fnm_tra <- 'primates_logmass.txt'
-# fnm_ctl <- 'primate_control.txt'
-# ### PRIMATES
-
 ### load tree and traits
 phy <- read.tree(fnm_phy)
 tra <- read.table(fnm_tra)
 head(tra)
-phy      # 7824 tips
-dim(tra) # only 6760 taxa in traits...
+phy      # 2577 tips
+str(tra)
 
 ### generate *custom* control file for LICHENS
-priors <- setBAMMpriors(phy     = phy,
-                        traits  = fnm_tra,
-                        outfile = NULL)
+(priors <- setBAMMpriors(phy    = phy,
+                        traits  = tra,
+                        outfile = NULL)) # TODO names must match............. 
 generateControlFile(file = fnm_ctl,
                     type = 'trait',
                     params = list(
