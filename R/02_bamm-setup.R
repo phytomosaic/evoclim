@@ -11,6 +11,7 @@
 rm(list=ls())
 require(ecole)       # for plotting and convenience functions
 require(BAMMtools)   # for BAMM
+require(coda)        # for MCMC diagnostics
 
 ### prune tree and traits to exact matches, then save as bamm inputs
 wd <- '/home/rob/prj/evoclim/bamm'       # temporary working dir
@@ -39,9 +40,12 @@ ecole::plot_heatmap(pb$V[,1:5], xexp=2.5)
 # PC1 = 'generalist/specialist' (high vals = broader tolerances)
 tr_position <- data.frame(rownames(pa$x), pa$x[,1])   # tropicality/boreality
 tr_breadth  <- data.frame(rownames(pb$x), pb$x[,1])   # generalist/specialist
+# names(tr_breadth) <- names(tr_position) <- c('spp','scr')
 write.tree(p, file = 'lichen_phy.tre')                # phylogeny in bamm wd
-write.table(tr_position, file = 'lichen_tra_pos.txt') # trait positions PCA
-write.table(tr_breadth, file = 'lichen_tra_brd.txt')  # trait breadth PCA
+write.table(tr_position, file = 'lichen_tra_pos.txt', sep = '\t', 
+            quote = F, row.names=F, col.names=F)  # trait positions PCA
+write.table(tr_breadth, file = 'lichen_tra_brd.txt', sep = '\t', 
+            quote = F, row.names=F, col.names=F)  # trait breadth PCA
 rm(is_breadth, pc, pa, pb, tr_position, tr_breadth)
 
 ### setup dirs and filenames
@@ -53,82 +57,106 @@ list.files()                     # check which files are in here
 
 ### load tree and traits
 phy <- read.tree(fnm_phy)
-tra <- read.table(fnm_tra)
-head(tra)
-phy      # 2577 tips
-str(tra)
+# tra <- read.table(fnm_tra)
+# hist(tra[,2], breaks=77) # distribution of PC1 scores for niche position
+# text(c(-14, 0, 12), c(100,100,100),c('Polar','Temperate','Tropical'))
+
 
 ### generate *custom* control file for LICHENS
-(priors <- setBAMMpriors(phy    = phy,
-                        traits  = tra,
-                        outfile = NULL)) # TODO names must match............. 
+(priors <- setBAMMpriors(phy     = phy,
+                         traits  = 'lichen_tra_pos.txt',
+                         outfile = NULL,
+                         Nmax    = 9999))
 generateControlFile(file = fnm_ctl,
                     type = 'trait',
                     params = list(
-                      treefile   = fnm_phy,
-                      traitfile  = fnm_tra, 
-                      globalSamplingFraction = '1',
-                      numberOfGenerations = '100000',
-                      lambdaInitPrior  = as.numeric(priors['lambdaInitPrior']),
-                      lambdaShiftPrior = as.numeric(priors['lambdaShiftPrior']),
-                      muInitPrior      = as.numeric(priors['muInitPrior']),
+                      treefile            = fnm_phy,
+                      traitfile           = fnm_tra, 
+                      numberOfGenerations = '1000000', # 65 million per PNAS
+                      mcmcWriteFreq       = '1000',   # 10,000 per PNAS
+                      eventDataWriteFreq  = '1000',   # 10,000 per PNAS
+                      acceptanceResetFreq = '1000',   # 10,000 per PNAS
+                      printFreq           = '10000',   # how often print to console
+                      outName = 'pos', # filename prefix
+                      # lambdaInitPrior  = as.numeric(priors['lambdaInitPrior']),
+                      # lambdaShiftPrior = as.numeric(priors['lambdaShiftPrior']),
+                      # muInitPrior      = as.numeric(priors['muInitPrior']),
+                      # lambdaIsTimeVariablePrior   = '0', # per PNAS
                       expectedNumberOfShifts = '34',     # per PNAS
-                      lambdaIsTimeVariablePrior   = '0', # per PNAS
+                      betaInitPrior  = as.numeric(priors['betaInitPrior']),
+                      betaShiftPrior = as.numeric(priors['betaShiftPrior']),
+                      betaIsTimeVariablePrior = 0, # per PNAS and Matt, keep time-constant
+                      useObservedMinMaxAsTraitPriors = '1'
                     ))
 rm(priors)
 system( paste0('cat ', fnm_ctl) ) # verify 
-# ### generate a custom control file for PRIMATES
-# priors <- setBAMMpriors(phy     = phy, 
-#                         traits  = fnm_tra, 
-#                         outfile = NULL)
-# generateControlFile(fnm_ctl,
-#                     type = 'trait',     # for traits analysis
-#                     params = list(
-#                       treefile               = fnm_phy,
-#                       traitfile              = fnm_tra, 
-#                       overwrite = '0',                   # do NOT overwrite
-#                       # globalSamplingFraction = '0.98',
-#                       numberOfGenerations    = '1000000',
-#                       # lambdaInitPrior        = '1.889',
-#                       # lambdaShiftPrior       = '0.032',
-#                       # muInitPrior            = '1.889',
-#                       expectedNumberOfShifts      = '1',
-#                       # lambdaIsTimeVariablePrior   = '0',
-#                       betaInitPrior  = as.numeric(priors['betaInitPrior']),
-#                       betaShiftPrior = as.numeric(priors['betaShiftPrior']),
-#                       useObservedMinMaxAsTraitPriors = 
-#                         as.numeric(priors['useObservedMinMaxAsTraitPriors'])
-#                     ))
-# # numberOfGenerations = 100000 # Number of generations to perform MCMC simulation
-# # mcmcWriteFreq = 5000 # Frequency in which to write the MCMC output to a file 
-# system( paste0('cat ', fnm_ctl) ) # verify 
 
 
 
 #############################################################################
-### ! ! ! RUN THE BAMM ANALYSIS ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
+###################################################################
+#########################################################
+### ! ! ! RUN BAMM ANALYSIS ! ! !
 system( 'bamm --version' )              # BAMM 2.5.0 (2015-11-01)
-system( paste0('bamm -c ', fnm_ctl) )   # system( 'bamm -c traitcontrol.txt' )
-### ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
+system( paste0('bamm -c ', fnm_ctl) )
+#########################################################
+###################################################################
 #############################################################################
 
 
+### convergence diagnostics
+mcmcout <- read.csv('pos_mcmc_out.txt', header=T)
+plot(mcmcout$logLik ~ mcmcout$generation) # sketch whether run converged 
+plot(mcmcout$logPrior ~ mcmcout$generation)
+burnstart <- floor(0.1 * nrow(mcmcout)) # discard first 10% of samples as burnin
+postburn  <- mcmcout[burnstart:nrow(mcmcout), ]
+coda::effectiveSize(postburn$N_shifts) # effective sample sizes of number of shift events in each sample
+coda::effectiveSize(postburn$logLik) # effective sample sizes of the log-likelihood   
 
 
-
-### load event data after BAMM
+### load BAMM event data 
 ed <- getEventData(phy = phy,
-                   eventdata = 'event_data.txt',
-                   burnin = 0.10,
-                   nsamples = NULL,
+                   eventdata = 'pos_event_data.txt',
+                   burnin = 0.10,   # 10% per PNAS
+                   nsamples = NULL, # 2000 per PNAS
                    verbose = TRUE,
                    type = 'trait')
 
-### plot rate of climatic trait evolution (climate positions)
-x <- plot(ed, pal=viridis::viridis(99), breaksmethod='quantile') # 'jenks'
+
+### shift probabilities and Bayes Factors
+shift_probs <- summary(ed)
+pr_null     <- 1/NROW(mcmcout) # probability of null no-shift model
+# compare prior and posterior
+set_par_mercury(1)
+plotPrior(mcmcout, expectedNumberOfShifts=34) 
+
+# Bayes factors for ALL pairwise models (highest BF best):
+bfmat <- computeBayesFactors(mcmcout, expectedNumberOfShifts=34, burnin=0.1)
+plot_heatmap(bfmat)
+persp(bfmat, theta=135)
+persp(bfmat[,1:11], theta=135)
+stepBF(bfmat, step.size = 1, inputType = 'matrix') # optimal number of shifts
+# plot shift probabilities and Bayes factors
+set_par_mercury(3)
+plot(shift_probs[,1], shift_probs[,2], type='b', ylab='Shift probabilities')
+plot(shift_probs[,1], shift_probs[,2] / pr_null, type='b',
+     ylab='Min Bayes factor, relative to null no-shift model')
+plot(shift_probs[,1], bfmat[,1], type='b',
+     ylab='Bayes factors, relative to 9-shift model')
+
+
+
+
+### plot rate of climatic trait evolution (for climate niche positions)
+x <- plot(ed, pal=viridis::viridis(99), breaksmethod='quantile', legend=T)
+# x <- plot(ed, pal=viridis::viridis(99), breaksmethod='jenks')
+
+
 ### plot subtrees while preserving the original rates (colorbreaks)
 identify(phy) # locate node(s) graphically on tree...
-plot(subtreeBAMM(ed, node = 386), lwd = 3, colorbreaks = x$colorbreaks)
+i_node <- 4263
+plot(subtreeBAMM(ed, node = i_node), lwd = 1, colorbreaks = x$colorbreaks,
+     pal=viridis::viridis(99))
 # ### `dtRates` if you want to change tau and rates for entire tree
 # tau <- 0.002
 # ed  <- dtRates(ed, tau = tau)
@@ -145,6 +173,7 @@ cset <- credibleShiftSet(ed, expectedNumberOfShifts=1, threshold=3)
 summary(cset)
 plot.credibleshiftset(cset, lwd=2.5)
 
+
 ### macroevolutionary cohort analysis:
 #     pairwise prob that 2 species share a common macroevolutionary rate dynamic
 cmat <- getCohortMatrix(ed)
@@ -152,29 +181,26 @@ cohorts(cmat, ed, use.plot.bammdata=TRUE)
 
 
 ### plot evolutionary rates through time (separately for three clades)
-i_node  <- 386
 ecole::set_par_mercury(3)
-yl <- c(0,0.3)
+yl <- c(0,2.7)
 st <- max(branching.times(phy))
 plotRateThroughTime(ed, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
-text(x=30, y= 0.8, label='All taxa', font=4, cex=2.0, pos=4)
+text(x=200, y= 0.2, label='All taxa', font=4, cex=2.0, pos=4)
 plotRateThroughTime(ed, intervalCol='blue', avgCol='blue', start.time=st, 
                     node=i_node, nodetype = 'include', ylim=yl)
-text(x=30, y= 0.8, label='Clade A', font=4, cex=2.0, pos=4)
+text(x=200, y= 0.2, label='Clade A', font=4, cex=2.0, pos=4)
 plotRateThroughTime(ed, intervalCol='green', avgCol='green', start.time=st, 
                     node=i_node, nodetype = 'exclude', ylim=yl)
-text(x=30, y= 0.8, label='Clade B', font=4, cex=2.0, pos=4)
+text(x=200, y= 0.2, label='Clade B', font=4, cex=2.0, pos=4)
 
 
 ### plot evolutionary rates through time (overplot three clades)
 ecole::set_par_mercury(1)
-yl <- c(0,0.3)
-st <- max(branching.times(phy))
 plotRateThroughTime(ed, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
 plotRateThroughTime(ed, intervalCol='blue', avgCol='blue', start.time=st, 
                     node=i_node, nodetype = 'include', add=T)
-plotRateThroughTime(ed, intervalCol='green', avgCol='green', start.time=st, 
-                    node=i_node, nodetype = 'exclude', add=T)
+# plotRateThroughTime(ed, intervalCol='green', avgCol='green', start.time=st, 
+#                     node=i_node, nodetype = 'exclude', add=T)
 
 
 
@@ -184,10 +210,10 @@ plotRateThroughTime(ed, intervalCol='green', avgCol='green', start.time=st,
 
 ### STRAPP analyses
 strapp <- traitDependentBAMM(ephy = ed,
-                           traits = tra,
-                           reps = 999,
-                           # return.full = TRUE,
-                           method = 'spearman')
+                             traits = tra,
+                             reps = 999,
+                             # return.full = TRUE,
+                             method = 'spearman')
 str(strapp)                      # correlation and its p-value
 hist(strapp$obs.corr, breaks=55) # distribution of correlations from permutations
 abline(v=strapp$estimate, lwd=3)
