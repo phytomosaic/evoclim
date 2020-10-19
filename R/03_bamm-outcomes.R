@@ -2,7 +2,7 @@
 #
 #  BAMM outcomes: analyze tests for rateshifts in climatic niche evolution
 #
-#    Rob Smith, phytomosaic@gmail.com, 16 Oct 2020
+#    Rob Smith, phytomosaic@gmail.com, 19 Oct 2020
 #
 ##      GNU General Public License, Version 3.0    ###################
 
@@ -36,8 +36,7 @@ set_par_mercury(2)
 hist(read.table(fnm_pos_tra)[,2], breaks=77, main='', xlab='PC1 niche positions') 
 text(c(-12, 0, 12), c(100,100,100),c('Polar','Temperate','Tropical'))
 hist(read.table(fnm_brd_tra)[,2], breaks=77, main='', xlab='PC1 niche breadths') 
-text(c(-14, 0), c(100,100),c('Generalist','Specialist'))
-
+text(c(-14, 0), c(150,150),c('Generalist','Specialist'))
 
 # ### do quick ancestral state reconstructions
 # lapply(1:NCOL(tr), function(j) { # ! ! ! TIMEWARN ! ! ! ~1-2 min per trait
@@ -204,6 +203,45 @@ plotRateThroughTime(ed, intervalCol='blue', avgCol='blue', start.time=st,
                     node=i_node, nodetype = 'include', add=T)
 # plotRateThroughTime(ed, intervalCol='green', avgCol='green', start.time=st, 
 #                     node=i_node, nodetype = 'exclude', add=T)
+
+
+
+
+
+
+### plot geologic periods on fan phylogeny
+`plot_geologic_rings` <- function(phy, legend = TRUE, ...) {
+  require(phytools)
+  require(plotrix)
+  plotTree(phy, ftype='off', ylim=c(-0.2*Ntip(phy),Ntip(phy)),
+           xlim=c(max(nodeHeights(phy)),0),
+           direction='leftwards')
+  obj <- phytools::geo.legend()
+  r   <- max(obj$leg[,1]) - obj$leg[,2]
+  plotTree(phy, type='fan', fsize=0.7, ftype='off', color='transparent')
+  for(i in 1:nrow(obj$leg)) {
+    plotrix::draw.circle(0,0,
+                         radius=r[i],
+                         col=obj$colors[i],
+                         border='transparent')
+  }
+  par(fg='transparent')
+  plotTree(phy, type='fan', add=TRUE, fsize=0.7, lwd=0.3, ftype='off')
+  if (legend) {
+    par(fg='black')
+    add.simmap.legend(colors=obj$colors[rownames(obj$leg)],
+    prompt=FALSE, x=0.95*par()$usr[1], y=100+0.6*par()$usr[3])
+  }
+}
+plot_geologic_rings(phy)
+
+
+
+
+
+
+
+
 
 
 
