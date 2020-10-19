@@ -139,9 +139,17 @@ rm(priors)
 ###################################################################
 #########################################################
 ### ! ! ! RUN BAMM ANALYSIS ! ! !
-system( paste0('bamm -c ', fnm_brd_ctl) )
+cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
 system( paste0('bamm -c ', fnm_pos_ctl) )
+cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
+
+cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
+system( paste0('bamm -c ', fnm_brd_ctl) )
+cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
+
+cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
 system( paste0('bamm -c ', fnm_div_ctl) )
+cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
 #########################################################
 ###################################################################
 #############################################################################
