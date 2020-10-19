@@ -48,29 +48,29 @@ write.table(tr_position, file = 'lichen_tra_pos.txt', sep = '\t',
             quote = F, row.names=F, col.names=F)  # trait positions PCA
 write.table(tr_breadth, file = 'lichen_tra_brd.txt', sep = '\t', 
             quote = F, row.names=F, col.names=F)  # trait breadth PCA
-rm(is_breadth, pc, pa, pb, tr_position, tr_breadth)
+rm(is_breadth, pc, pa, pb, tr_position, tr_breadth, p, tr, wd)
 
 
 ### setup dirs and filenames
 fnm_phy     <- 'lichen_phy.tre'      # phylogeny
 fnm_pos_tra <- 'lichen_tra_pos.txt'  # traits (niche position)
 fnm_brd_tra <- 'lichen_tra_brd.txt'  # traits (niche breadth)
-fnm_brd_ctl <- 'brd_ctl.txt'         # control (to be done below)
 fnm_pos_ctl <- 'pos_ctl.txt'         # control (to be done below)
+fnm_brd_ctl <- 'brd_ctl.txt'         # control (to be done below)
 fnm_div_ctl <- 'div_ctl.txt'         # control (to be done below)
 system( 'ls -F' )                    # check which files are in here
 list.files()                         # check which files are in here
-samp_freq <- '5000'                  # 10,000 per PNAS
-n_gens    <- '5000000'               # 65 million per PNAS
+samp_freq <- '10000'     # '5000'      # 10,000 per PNAS
+n_gens    <- '65000000'  # '5000000'   # 65 million per PNAS
 phy       <- read.tree(fnm_phy)      # load tree
 
 
-### generate *custom* control file for lichen climate niche POSITIONS
+### generate custom control file for lichen climate niche POSITIONS
 (priors <- setBAMMpriors(phy     = phy,
-                         traits  = 'lichen_tra_pos.txt',
+                         traits  = fnm_pos_tra,
                          outfile = NULL,
                          Nmax    = 9999))
-generateControlFile(file = fnm_brd_ctl,
+generateControlFile(file = fnm_pos_ctl,
                     type = 'trait',
                     params = list(
                       treefile            = fnm_phy,
@@ -87,15 +87,13 @@ generateControlFile(file = fnm_brd_ctl,
                       betaIsTimeVariablePrior = 0, # per PNAS and Matt, keep time-constant
                       useObservedMinMaxAsTraitPriors = '1'
                     ))
-rm(priors)
 
-
-### generate *custom* control file for lichen climate niche BREADTHS
+### generate custom control file for lichen climate niche BREADTHS
 (priors <- setBAMMpriors(phy     = phy,
-                         traits  = 'lichen_tra_pos.txt',
+                         traits  = fnm_brd_tra,
                          outfile = NULL,
                          Nmax    = 9999))
-generateControlFile(file = fnm_ctl,
+generateControlFile(file = fnm_brd_ctl,
                     type = 'trait',
                     params = list(
                       treefile            = fnm_phy,
@@ -112,15 +110,13 @@ generateControlFile(file = fnm_ctl,
                       betaIsTimeVariablePrior = 0, # per PNAS and Matt, keep time-constant
                       useObservedMinMaxAsTraitPriors = '1'
                     ))
-rm(priors)
 
-
-### generate *custom* control file for lichen climate niche DIVERSIFICATION
+### generate custom control file for lichen species DIVERSIFICATION
 (priors <- setBAMMpriors(phy     = phy,
                          traits  = NULL,
                          outfile = NULL,
                          Nmax    = 9999))
-generateControlFile(file = fnm_ctl,
+generateControlFile(file = fnm_div_ctl,
                     type = 'diversification',
                     params = list(
                       treefile            = fnm_phy,
