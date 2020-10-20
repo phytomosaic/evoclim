@@ -60,10 +60,9 @@ fnm_brd_ctl <- 'brd_ctl.txt'         # control (to be done below)
 fnm_div_ctl <- 'div_ctl.txt'         # control (to be done below)
 system( 'ls -F' )                    # check which files are in here
 list.files()                         # check which files are in here
-samp_freq <- '10000'     # '5000'      # 10,000 per PNAS
-n_gens    <- '65000000'  # '5000000'   # 65 million per PNAS
-phy       <- read.tree(fnm_phy)      # load tree
-
+samp_freq <-     '10000'      # '10000' per PNAS     # '5000' old
+n_gens    <-  '65000000'      # '65000000' per PNAS  # '10000000' old
+(phy       <- read.tree(fnm_phy))    # load tree
 
 ### generate custom control file for lichen climate niche POSITIONS
 (priors <- setBAMMpriors(phy     = phy,
@@ -140,15 +139,15 @@ rm(priors)
 #########################################################
 ### ! ! ! RUN BAMM ANALYSIS ! ! !
 cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
-system( paste0('bamm -c ', fnm_pos_ctl) )
+system( paste0('bamm -c ', fnm_pos_ctl) )         ### << --- niche position
 cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
 
 cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
-system( paste0('bamm -c ', fnm_brd_ctl) )
+system( paste0('bamm -c ', fnm_brd_ctl) )         ### << --- niche breadth
 cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
 
 cat(paste0('Began at: ', (timebegin <- Sys.time()),'\n\n'))
-system( paste0('bamm -c ', fnm_div_ctl) )
+system( paste0('bamm -c ', fnm_div_ctl) )         ### << --- diversification
 cat(paste0('Ended at: ', Sys.time()), 'after', format(Sys.time() - timebegin),'\n\n')
 #########################################################
 ###################################################################
