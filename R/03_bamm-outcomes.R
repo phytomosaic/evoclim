@@ -67,17 +67,17 @@ rm(trm,tr)
 
 ### load BAMM event data
 ed_pos <- getEventData(phy = phy,
-                   eventdata = fnm_pos_event,
-                   burnin    = 0.10,  # 10% per PNAS
-                   nsamples  = 2000,  # 2000 per PNAS
-                   verbose   = TRUE,
-                   type      = 'trait')
+                       eventdata = fnm_pos_event,
+                       burnin    = 0.10,  # 10% per PNAS
+                       nsamples  = 2000,  # 2000 per PNAS
+                       verbose   = TRUE,
+                       type      = 'trait')
 ed_brd <- getEventData(phy = phy,
-                   eventdata = fnm_brd_event,
-                   burnin    = 0.10,  # 10% per PNAS
-                   nsamples  = 2000,  # 2000 per PNAS
-                   verbose   = TRUE,
-                   type      = 'trait')
+                       eventdata = fnm_brd_event,
+                       burnin    = 0.10,  # 10% per PNAS
+                       nsamples  = 2000,  # 2000 per PNAS
+                       verbose   = TRUE,
+                       type      = 'trait')
 # ed_div <- getEventData(phy = phy,
 #                    eventdata = fnm_div_event,
 #                    burnin    = 0.10,  # 10% per PNAS
@@ -185,35 +185,20 @@ best_pos$eventData[[1]]$node             # doesnt match line above...
 png('../fig/fig_06_mean_rate_niche.png', wid=10.5, hei=5.25, units='in',
     bg='transparent', res=700)
 set_par_mercury(2)
-plot(ed_pos, 
-          method = 'polar', 
-          pal=viridis::inferno(99), 
-          breaksmethod = 'linear',
-          # logcolor=TRUE,
-          color.interval = c(0,3),
-          legend=F)
+plot(ed_pos, method = 'polar', pal=viridis::inferno(99), 
+     breaksmethod = 'linear', color.interval = c(0,3), legend=F)
 addBAMMshifts(best_pos, method = 'polar', cex=0.8, bg='gold', par.reset = F)
-title('Rates of evolution of\nclimate niche position', cex=0.7)
-plot(ed_brd, 
-          method = 'polar', 
-          pal=viridis::inferno(99), 
-          breaksmethod = 'linear',
-          # logcolor=TRUE,
-          color.interval = c(0,3),
-          legend=F)
+title('Rates of evolution of\nclimate niche position', cex.main=0.7)
+plot(ed_brd, method = 'polar', pal=viridis::inferno(99), 
+     breaksmethod = 'linear', color.interval = c(0,3), legend=F)
 addBAMMshifts(best_brd, method = 'polar', cex=0.8, bg='gold', par.reset = F)
-title('Rates of evolution of\nclimate niche breadth', cex=0.7)
-# z <- plot(ed_div, 
-#           method = 'polar', 
-#           pal=viridis::inferno(99), 
-#           breaksmethod = 'linear',
-#           # logcolor=TRUE,
-#           color.interval = c(0,3),
-#           legend=F)
+title('Rates of evolution of\nclimate niche breadth', cex.main=0.7)
+# plot(ed_div, method = 'polar', pal=viridis::inferno(99), 
+#      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
 # addBAMMshifts(best_div, method = 'polar', cex=1, bg='gold')
 # title('Rate of diversification')
 dev.off()
-# den <- x$colordens # rate densities
+
 
 # ### phylorate histograms
 # `rate_hist` <- function (phylorates, xlim=NULL, ...) {
@@ -274,6 +259,19 @@ plotRateThroughTime(ed_pos, intervalCol='green', avgCol='green', start.time=st,
 text(x=200, y= 0.2, label='Clade B', font=4, cex=2.0, pos=4)
 
 
+### overplot............
+png('../fig/fig_07_rates_vs_time.png', wid=4.75, hei=4.25, units='in',
+    bg='transparent', res=700)
+yl <- c(0,1)
+st <- max(branching.times(phy))
+ecole::set_par_mercury(1)
+plotRateThroughTime(ed_pos, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
+plotRateThroughTime(ed_brd, intervalCol='blue', avgCol='blue', start.time=st, 
+                    ylim=yl, add=T)
+legend('topleft',legend=c('Climate position','Climate breadth'),
+       fill=c('red','blue'), bty='n')
+dev.off()
+
 ### plot evolutionary rates through time (overplot three clades)
 ecole::set_par_mercury(1)
 plotRateThroughTime(ed_pos, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
@@ -308,7 +306,7 @@ plotRateThroughTime(ed_pos, intervalCol='blue', avgCol='blue', start.time=st,
   if (legend) {
     par(fg='black')
     add.simmap.legend(colors=obj$colors[rownames(obj$leg)],
-    prompt=FALSE, x=0.95*par()$usr[1], y=100+0.6*par()$usr[3])
+                      prompt=FALSE, x=0.95*par()$usr[1], y=100+0.6*par()$usr[3])
   }
 }
 plot_geologic_rings(phy)
