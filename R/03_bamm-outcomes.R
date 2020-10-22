@@ -241,8 +241,8 @@ dev.off()
 
 ### macroevolutionary cohort analysis:
 #     pairwise prob that 2 species share a common macroevolutionary rate dynamic
-cmat <- getCohortMatrix(ed_pos)
-cohorts(cmat, ed_pos, use.plot.bammdata=TRUE)
+cohorts(getCohortMatrix(ed_pos), ed_pos, use.plot.bammdata=TRUE)
+cohorts(getCohortMatrix(ed_brd), ed_brd, use.plot.bammdata=TRUE)
 
 
 ### plot evolutionary rates through time (separately for three clades)
