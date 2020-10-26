@@ -78,18 +78,18 @@ ed_brd <- getEventData(phy = phy,
                        nsamples  = 2000,  # 2000 per PNAS
                        verbose   = TRUE,
                        type      = 'trait')
-# ed_div <- getEventData(phy = phy,
-#                    eventdata = fnm_div_event,
-#                    burnin    = 0.10,  # 10% per PNAS
-#                    nsamples  = 2000,  # 2000 per PNAS
-#                    verbose   = TRUE,
-#                    type      = 'diversification')
+ed_div <- getEventData(phy = phy,
+                       eventdata = fnm_div_event,
+                       burnin    = 0.10,  # 10% per PNAS
+                       nsamples  = 2000,  # 2000 per PNAS
+                       verbose   = TRUE,
+                       type      = 'diversification')
 
 
 ### convergence diagnostics
 mc_pos <- read.csv(fnm_pos_mcmc, header=T)
 mc_brd <- read.csv(fnm_brd_mcmc, header=T)
-# mc_div <- read.csv(fnm_div_mcmc, header=T)
+mc_div <- read.csv(fnm_div_mcmc, header=T)
 `convergence_diagnostics` <- function(mc_pos){
   burnstart <- floor(0.1 * nrow(mc_pos)) # discard first 10% of samples as burnin
   postburn  <- mc_pos[burnstart:nrow(mc_pos), ]
@@ -106,14 +106,14 @@ mc_brd <- read.csv(fnm_brd_mcmc, header=T)
 }
 convergence_diagnostics(mc_pos)
 convergence_diagnostics(mc_brd)
-# convergence_diagnostics(mc_div)
+convergence_diagnostics(mc_div)
 
 
 # compare prior and posterior
 set_par_mercury(3)
 plotPrior(mc_pos, expectedNumberOfShifts=es) 
 plotPrior(mc_brd, expectedNumberOfShifts=es) 
-# plotPrior(mc_div, expectedNumberOfShifts=es) 
+plotPrior(mc_div, expectedNumberOfShifts=es)
 
 
 ### identify 'best' configurations (3 alternatives):
@@ -147,44 +147,57 @@ plotPrior(mc_brd, expectedNumberOfShifts=es)
 ### alternative 3 --- configuration that maximizes a posteriori probability
 best_pos <- getBestShiftConfiguration(ed_pos, expectedNumberOfShifts=es)
 best_brd <- getBestShiftConfiguration(ed_brd, expectedNumberOfShifts=es)
-# best_div <- getBestShiftConfiguration(ed_div, expectedNumberOfShifts=es)
+best_div <- getBestShiftConfiguration(ed_div, expectedNumberOfShifts=es)
 NROW(best_pos$eventData[[1]]) # 31 distinct shifts in this configuration
 NROW(best_brd$eventData[[1]]) # 24 distinct shifts in this configuration
-# NROW(best_div$eventData[[1]]) # xxxxx distinct shifts in this configuration
+NROW(best_div$eventData[[1]]) # xxxxx distinct shifts in this configuration
 
-plot(best_pos, 
-     method = 'polar',
-     pal=viridis::inferno(99),
-     logcolor=TRUE,
-     # breaksmethod='quantile',  # breaksmethod='jenks'
-     legend=T)
-
-plot(ed_pos, 
-     method = 'polar', 
-     pal=viridis::inferno(99), 
-     breaksmethod = 'linear',
-     # logcolor=TRUE,
-     color.interval = c(0,3),
-     legend=F)
-addBAMMshifts(best_pos, method = 'polar', cex=1, bg='gold')
-
-best_pos$eventData # which nodes have distinct shifts
-sort(getShiftNodesFromIndex(best_pos,1)) # doesnt match line below
-best_pos$eventData[[1]]$node             # doesnt match line above...
-# ape::axisPhylo()
-# require(plotrix)
-# for(i in c(0,.4,.9, 1.1)) {
-#   plotrix::draw.circle(0,0,
-#                        radius=i,
-#                        col='#00000040',
-#                        border='transparent')
+### TODO trying to plot geological periods as circles...
+# set_par_mercury(1)
+# plot(best_pos, method = 'polar', pal=viridis::inferno(99), 
+#      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
+# set_par_mercury(1)
+# plot(ed_pos, method = 'polar', pal=viridis::inferno(99), 
+#      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
+# addBAMMshifts(best_pos, method = 'polar', cex=1, bg='gold')
+# best_pos$eventData # which nodes have distinct shifts
+# sort(getShiftNodesFromIndex(best_pos,1)) # doesnt match line below
+# best_pos$eventData[[1]]$node             # doesnt match line above...
+# # ape::axisPhylo()
+# # require(plotrix)
+# # for(i in c(0,.4,.9, 1.1)) {
+# #   plotrix::draw.circle(0,0,
+# #                        radius=i,
+# #                        col='#00000040',
+# #                        border='transparent')
+# # }
+# points(0,0,cex=1.1, col='blue')
+# u <- par('usr')
+# uu <- u * 0.95
+# max(branching.times(phy))
+# max(nodeHeights(phy))
+# points(0,0,cex=1.1, col='blue')
+# points(uu[1], uu[4], cex=1.1, col='red')
+# points(uu[2], uu[3], cex=1.1, col='gold')
+# `circle` <- function(x,y,r=1,border="black",lty="solid",lwd=1,fill=NULL) {
+#   xapu <- sin(seq(0,pi,length=50)-pi/2)
+#   for (i in 1:length(x)) {
+#     xv1 <- x[i] + xapu*r[i]
+#     xv2 <- x[i] - xapu*r[i]
+#     yv1 <- sqrt(pmax(0,r[i]^2-(xv1-x[i])^2))+y[i]
+#     yv2 <- -sqrt(pmax(0,r[i]^2-(xv2-x[i])^2))+y[i]
+#     yv  <- c(yv1,yv2)
+#     xv  <- c(xv1,xv2)
+#     polygon(xv,yv,border=border,col=fill,lty=lty,lwd=lwd)
+#   }
 # }
+# circle(0,0,1)
+# circle(0,0,u[1])
 
-
-### mean, model-averaged rate of climatic trait evolution (for climate niche positions)
-png('../fig/fig_06_mean_rate_niche.png', wid=10.5, hei=5.25, units='in',
+### mean model-averaged rate of climatic trait evolution (for climate niche positions)
+png('../fig/fig_06_mean_rate_niche.png', wid=12.5, hei=4.25, units='in',
     bg='transparent', res=700)
-set_par_mercury(2)
+set_par_mercury(3)
 plot(ed_pos, method = 'polar', pal=viridis::inferno(99), 
      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
 addBAMMshifts(best_pos, method = 'polar', cex=0.8, bg='gold', par.reset = F)
@@ -193,10 +206,10 @@ plot(ed_brd, method = 'polar', pal=viridis::inferno(99),
      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
 addBAMMshifts(best_brd, method = 'polar', cex=0.8, bg='gold', par.reset = F)
 title('Rates of evolution of\nclimate niche breadth', cex.main=0.7)
-# plot(ed_div, method = 'polar', pal=viridis::inferno(99), 
-#      breaksmethod = 'linear', color.interval = c(0,3), legend=F)
-# addBAMMshifts(best_div, method = 'polar', cex=1, bg='gold')
-# title('Rate of diversification')
+plot(ed_div, method = 'polar', pal=viridis::inferno(99),
+     breaksmethod = 'linear', color.interval = c(0,3), legend=F)
+addBAMMshifts(best_div, method = 'polar', cex=1, bg='gold')
+title('Rate of diversification')
 dev.off()
 
 
@@ -241,8 +254,9 @@ dev.off()
 
 ### macroevolutionary cohort analysis:
 #     pairwise prob that 2 species share a common macroevolutionary rate dynamic
-cohorts(getCohortMatrix(ed_pos), ed_pos, use.plot.bammdata=TRUE)
-cohorts(getCohortMatrix(ed_brd), ed_brd, use.plot.bammdata=TRUE)
+cohorts(getCohortMatrix(ed_pos), ed_pos, lwd=0.1, use.plot.bammdata=FALSE)
+cohorts(getCohortMatrix(ed_brd), ed_brd, lwd=0.1, use.plot.bammdata=FALSE)
+cohorts(getCohortMatrix(ed_div), ed_div, lwd=0.1, use.plot.bammdata=FALSE)
 
 
 ### plot evolutionary rates through time (separately for three clades)
@@ -267,25 +281,28 @@ st <- max(branching.times(phy))
 ecole::set_par_mercury(1)
 plotRateThroughTime(ed_pos, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
 plotRateThroughTime(ed_brd, intervalCol='blue', avgCol='blue', start.time=st, 
-                    ylim=yl, add=T)
-legend('topleft',legend=c('Climate position','Climate breadth'),
-       fill=c('red','blue'), bty='n')
+                    add=T)
+plotRateThroughTime(ed_div, intervalCol='forestgreen', avgCol='forestgreen', 
+                    ratetype='netdiv', start.time=st, 
+                    add=T)
+legend('topleft',legend=c('Climate position','Climate breadth','Net diversification'),
+       fill=c('red','blue','forestgreen'), bty='n')
 dev.off()
+
 
 ### plot evolutionary rates through time (overplot three clades)
 ecole::set_par_mercury(1)
 plotRateThroughTime(ed_pos, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
-plotRateThroughTime(ed_pos, intervalCol='blue', avgCol='blue', start.time=st, 
-                    node=i_node, nodetype = 'include', add=T)
-# plotRateThroughTime(ed_pos, intervalCol='green', avgCol='green', start.time=st, 
+# plotRateThroughTime(ed_pos, intervalCol='blue', avgCol='blue', start.time=st, 
+#                     node=i_node, nodetype = 'include', add=T)
+# plotRateThroughTime(ed_pos, intervalCol='green', avgCol='green', start.time=st,
 #                     node=i_node, nodetype = 'exclude', add=T)
 
 
 
 
 
-
-### plot geologic periods on fan phylogeny
+### TODO plot geologic periods on fan phylogeny
 `plot_geologic_rings` <- function(phy, legend = TRUE, ...) {
   require(phytools)
   require(plotrix)
