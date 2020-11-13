@@ -6,7 +6,7 @@
 #
 ##      GNU General Public License, Version 3.0    ###################
 
-
+#
 
 ### preamble
 rm(list=ls())
@@ -150,7 +150,7 @@ best_brd <- getBestShiftConfiguration(ed_brd, expectedNumberOfShifts=es)
 best_div <- getBestShiftConfiguration(ed_div, expectedNumberOfShifts=es)
 NROW(best_pos$eventData[[1]]) # 31 distinct shifts in this configuration
 NROW(best_brd$eventData[[1]]) # 24 distinct shifts in this configuration
-NROW(best_div$eventData[[1]]) # xxxxx distinct shifts in this configuration
+NROW(best_div$eventData[[1]]) # 7 distinct shifts in this configuration???
 
 ### TODO trying to plot geological periods as circles...
 # set_par_mercury(1)
@@ -195,7 +195,7 @@ NROW(best_div$eventData[[1]]) # xxxxx distinct shifts in this configuration
 # circle(0,0,u[1])
 
 ### mean model-averaged rate of climatic trait evolution (for climate niche positions)
-png('../fig/fig_06_mean_rate_niche.png', wid=12.5, hei=4.25, units='in',
+png('../fig/fig_06_mean_rate_niche_and_div.png', wid=12.5, hei=4.25, units='in',
     bg='transparent', res=700)
 set_par_mercury(3)
 plot(ed_pos, method = 'polar', pal=viridis::inferno(99), 
@@ -207,7 +207,9 @@ plot(ed_brd, method = 'polar', pal=viridis::inferno(99),
 addBAMMshifts(best_brd, method = 'polar', cex=0.8, bg='gold', par.reset = F)
 title('Rates of evolution of\nclimate niche breadth', cex.main=0.7)
 plot(ed_div, method = 'polar', pal=viridis::inferno(99),
-     breaksmethod = 'linear', color.interval = c(0,3), legend=F)
+     breaksmethod = 'linear', 
+     # color.interval = c(0,3), 
+     legend=F)
 addBAMMshifts(best_div, method = 'polar', cex=1, bg='gold')
 title('Rate of diversification')
 dev.off()
@@ -226,7 +228,7 @@ dev.off()
 #   segments(x, y, x, 0, lend = 2, col = phylorates$colordens[, 3], lwd = 3)
 #   lines(x,y, col='grey')
 # }
-# set_par_mercury(2)
+# set_par_mercury(3)
 # rate_hist(x, xlim=c(0,3.2), add=T)
 # rate_hist(y, xlim=c(0,2.2), add=T)
 # rate_hist(z, xlim=c(0,2.2), add=T)
@@ -274,7 +276,7 @@ text(x=200, y= 0.2, label='Clade B', font=4, cex=2.0, pos=4)
 
 
 ### overplot............
-png('../fig/fig_07_rates_vs_time.png', wid=4.75, hei=4.25, units='in',
+png('../fig/fig_07_rates_vs_timez.png', wid=4.75, hei=4.25, units='in',
     bg='transparent', res=700)
 yl <- c(0,1)
 st <- max(branching.times(phy))
@@ -288,18 +290,6 @@ plotRateThroughTime(ed_div, intervalCol='forestgreen', avgCol='forestgreen',
 legend('topleft',legend=c('Climate position','Climate breadth','Net diversification'),
        fill=c('red','blue','forestgreen'), bty='n')
 dev.off()
-
-
-### plot evolutionary rates through time (overplot three clades)
-ecole::set_par_mercury(1)
-plotRateThroughTime(ed_pos, intervalCol='red', avgCol='red', start.time=st, ylim=yl)
-# plotRateThroughTime(ed_pos, intervalCol='blue', avgCol='blue', start.time=st, 
-#                     node=i_node, nodetype = 'include', add=T)
-# plotRateThroughTime(ed_pos, intervalCol='green', avgCol='green', start.time=st,
-#                     node=i_node, nodetype = 'exclude', add=T)
-
-
-
 
 
 ### TODO plot geologic periods on fan phylogeny
